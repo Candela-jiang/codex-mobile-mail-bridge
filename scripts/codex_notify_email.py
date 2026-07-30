@@ -124,7 +124,7 @@ def resolve_model_label(notification: dict, codex_config: dict) -> str:
     model = codex_config.get("model") or ""
     if provider and model:
         return f"{model} ({provider})"
-    return str(model or provider or "unknown")
+    return str(model or provider or "未知")
 
 
 def resolve_task_name(notification: dict) -> str:
@@ -141,7 +141,7 @@ def resolve_project_label(cwd: str, codex_config: dict) -> str:
     cwd_text = str(cwd or "").strip()
     projects = codex_config.get("projects") or {}
     if not cwd_text:
-        return "unknown"
+        return "未知"
 
     cwd_norm = cwd_text.casefold().rstrip("\\/")
     best_path = ""
@@ -163,9 +163,9 @@ def metadata_lines(notification: dict, config: dict, task_name: str = "") -> lis
     codex_config = load_codex_config()
     cwd = notification.get("cwd") or config.get("codex_cwd") or ""
     return [
-        f"AI model: {resolve_model_label(notification, codex_config)}",
-        f"Project: {resolve_project_label(cwd, codex_config)}",
-        f"Task: {task_name or resolve_task_name(notification)}",
+        f"AI 模型: {resolve_model_label(notification, codex_config)}",
+        f"项目: {resolve_project_label(cwd, codex_config)}",
+        f"任务: {task_name or resolve_task_name(notification)}",
     ]
 
 
@@ -212,15 +212,15 @@ def find_git_root(cwd: str) -> str:
 
 def git_status_report(cwd: str, config: dict) -> str:
     if not config.get("include_git_summary", True):
-        return "Git summary disabled."
+        return "Git 摘要已关闭。"
 
     cwd = safe_existing_cwd(cwd, config)
     git_root = find_git_root(cwd)
     if not git_root:
         return "\n".join(
             [
-                "Git: no repository detected for this project directory.",
-                "Changed files: unavailable without Git.",
+                "Git: 当前项目目录未检测到 Git 仓库。",
+                "变更文件: 没有 Git 仓库，无法统计。",
             ]
         )
 
@@ -228,30 +228,30 @@ def git_status_report(cwd: str, config: dict) -> str:
     branch_code, branch_text = run_text_command(["git", "branch", "--show-current"], git_root)
     stat_code, stat_text = run_text_command(["git", "diff", "--stat"], git_root)
 
-    branch = branch_text if branch_code == 0 and branch_text else "(detached or unknown)"
-    lines = [f"Git root: {git_root}", f"Git branch: {branch}"]
+    branch = branch_text if branch_code == 0 and branch_text else "（分离 HEAD 或未知）"
+    lines = [f"Git 根目录: {git_root}", f"Git 分支: {branch}"]
 
     if status_code == 0 and status_text:
         status_lines = status_text.splitlines()
         max_files = int(config.get("max_git_files") or 30)
-        lines.append(f"Changed files ({len(status_lines)}):")
+        lines.append(f"变更文件（{len(status_lines)} 个）:")
         lines.extend(status_lines[:max_files])
         if len(status_lines) > max_files:
-            lines.append(f"... {len(status_lines) - max_files} more file(s)")
+            lines.append(f"... 还有 {len(status_lines) - max_files} 个文件未列出")
     elif status_code == 0:
-        lines.append("Changed files: none")
+        lines.append("变更文件: 无")
     else:
-        lines.append(f"Changed files: git status failed: {status_text}")
+        lines.append(f"变更文件: git status 执行失败: {status_text}")
 
     if stat_code == 0 and stat_text:
-        lines.extend(["", "Diff stat:", stat_text])
+        lines.extend(["", "Diff 统计:", stat_text])
     return "\n".join(lines)
 
 
 def mobile_reply_hint(config: dict) -> str:
     return str(
         config.get("mobile_reply_hint")
-        or "Reply with subject containing [codex]. Put the next project instruction in the email body."
+        or "用手机回邮件时，请让主题包含 [codex-next]，正文写项目的下一步指令。"
     )
 
 
@@ -262,24 +262,24 @@ def build_body(notification: dict, config: dict) -> str:
     cwd = notification.get("cwd", "")
     body = "\n".join(
         [
-            "Codex computer-side work report.",
+            "Codex 电脑端工作报告",
             "",
-            f"Time: {datetime.now().isoformat(timespec='seconds')}",
+            f"时间: {datetime.now().isoformat(timespec='seconds')}",
             metadata_block(notification, config, task_name),
-            f"Thread: {notification.get('thread-id', '')}",
-            f"Turn: {notification.get('turn-id', '')}",
-            f"Cwd: {cwd}",
+            f"线程: {notification.get('thread-id', '')}",
+            f"轮次: {notification.get('turn-id', '')}",
+            f"工作目录: {cwd}",
             "",
-            "Computer-side evidence:",
+            "电脑端证据:",
             git_status_report(cwd, config),
             "",
-            "User input:",
-            "\n".join(str(item) for item in user_messages).strip() or "(empty)",
+            "用户输入:",
+            "\n".join(str(item) for item in user_messages).strip() or "（空）",
             "",
-            "Codex reply:",
-            assistant_message.strip() or "(empty)",
+            "Codex 回复:",
+            assistant_message.strip() or "（空）",
             "",
-            "Next instruction from phone:",
+            "手机下一步指令:",
             mobile_reply_hint(config),
         ]
     )

@@ -12,7 +12,7 @@
   "dpapi_secret_file": "gmail_app_password.dpapi",
   "subject_prefix": "[Codex]",
   "inbox_enabled": false,
-  "inbox_subject_tag": "[codex]",
+  "inbox_subject_tag": "[codex-next]",
   "allowed_senders": [
     "your-address@gmail.com"
   ],
@@ -23,7 +23,7 @@
   "codex_timeout_seconds": 1800,
   "include_git_summary": true,
   "max_git_files": 30,
-  "mobile_reply_hint": "Reply with subject containing [codex]. Put the next project instruction in the email body.",
+  "mobile_reply_hint": "用手机回邮件时，请让主题包含 [codex-next]，正文写项目的下一步指令。",
   "max_body_chars": 15000,
   "original_notify": []
 }

@@ -31,4 +31,4 @@ if (-not $existing) {
 
 Write-Host "Phone workflow:"
 Write-Host "1. Codex turn reports will be emailed to the configured recipients."
-Write-Host "2. Send Gmail a message with subject containing [codex] to give the next project instruction."
+Write-Host "2. Send Gmail a message with subject containing $($config.inbox_subject_tag) to give the next project instruction."

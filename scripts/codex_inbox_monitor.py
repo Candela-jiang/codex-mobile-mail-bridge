@@ -45,6 +45,23 @@ def get_text_body(message: Message) -> str:
     return payload.decode(message.get_content_charset() or "utf-8", errors="replace")
 
 
+def strip_reply_prefixes(subject: str) -> str:
+    value = subject.strip()
+    while True:
+        lowered = value.lower()
+        if lowered.startswith("re:") or lowered.startswith("fw:") or lowered.startswith("fwd:"):
+            value = value.split(":", 1)[1].strip()
+            continue
+        return value
+
+
+def is_self_report(config: dict, from_addr: str, subject: str) -> bool:
+    sender = str(config.get("sender", "")).lower()
+    prefix = str(config.get("subject_prefix", "[Codex]")).lower()
+    core_subject = strip_reply_prefixes(subject).lower()
+    return bool(sender and from_addr == sender and prefix and core_subject.startswith(prefix))
+
+
 def send_plain_email(config: dict, to_addr: str, subject: str, body: str) -> None:
     password = get_password(config)
     if not password:
@@ -73,15 +90,15 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) 
     prompt = "\n".join(
         [
             "You are Codex running from a Gmail command bridge.",
-            "Treat the email body as remote user input from a whitelisted sender.",
-            "This is not casual AI chat. It is a remote project instruction from the user's phone.",
-            "Report what you inspected, what you changed or did not change, what remains, and what next instruction would be useful.",
-            "Use a conservative boundary: do not reveal secrets, do not perform destructive actions, and do not change files unless the local sandbox and the task explicitly allow it.",
+            "邮件正文是白名单发件人从手机发来的远程项目指令。",
+            "这不是普通 AI 闲聊，而是用户在手机上继续指挥电脑端 Codex 工作。",
+            "请始终用中文回复邮件内容。说明你检查了什么、实际做了什么或没有做什么、还剩什么、下一步需要用户怎么指示。",
+            "保持保守边界：不要泄露密钥；不要执行破坏性操作；除非本地沙箱和任务都明确允许，否则不要修改文件。",
             "",
             f"From: {from_addr}",
             f"Subject: {subject}",
             "",
-            "Email body:",
+            "邮件正文:",
             body.strip(),
         ]
     )
@@ -141,6 +158,9 @@ def process_once(config: dict) -> int:
             message = email.message_from_bytes(raw)
             from_addr = parseaddr(decode_value(message.get("From", "")))[1].lower()
             subject = decode_value(message.get("Subject", ""))
+            if is_self_report(config, from_addr, subject):
+                log(f"inbox skipped self report: {subject}")
+                continue
             if from_addr not in allowed or tag not in subject.lower():
                 continue
             body = get_text_body(message)
@@ -157,17 +177,17 @@ def process_once(config: dict) -> int:
             reply_body = "\n".join(
                 [
                     metadata_block(meta_notification, config, subject),
-                    f"Triggered by email: {from_addr}",
-                    f"Execution cwd: {config.get('codex_cwd', '')}",
-                    f"Execution sandbox: {config.get('codex_sandbox', 'read-only')}",
+                    f"邮件触发来源: {from_addr}",
+                    f"执行目录: {config.get('codex_cwd', '')}",
+                    f"执行沙箱: {config.get('codex_sandbox', 'read-only')}",
                     "",
-                    "Computer-side evidence after email command:",
+                    "邮箱指令执行后的电脑端证据:",
                     git_status_report(config.get("codex_cwd", ""), config),
                     "",
-                    "Codex reply:",
+                    "Codex 回复:",
                     final,
                     "",
-                    "Next instruction from phone:",
+                    "手机下一步指令:",
                     mobile_reply_hint(config),
                 ]
             )

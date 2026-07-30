@@ -93,7 +93,7 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "codex_timeout_seconds": args.codex_timeout_seconds,
         "include_git_summary": True,
         "max_git_files": 30,
-        "mobile_reply_hint": "Reply with subject containing [codex]. Put the next project instruction in the email body.",
+        "mobile_reply_hint": "用手机回邮件时，请让主题包含 [codex-next]，正文写项目的下一步指令。",
         "max_body_chars": 15000,
         "original_notify": original_notify,
     }
@@ -112,7 +112,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--codex-sandbox", default="read-only", choices=["read-only", "workspace-write", "danger-full-access"])
     parser.add_argument("--codex-timeout-seconds", type=int, default=1800)
     parser.add_argument("--poll-seconds", type=int, default=60)
-    parser.add_argument("--subject-tag", default="[codex]")
+    parser.add_argument("--subject-tag", default="[codex-next]")
     parser.add_argument("--smtp-host", default="smtp.gmail.com")
     parser.add_argument("--smtp-port", type=int, default=587)
     parser.add_argument("--imap-host", default="imap.gmail.com")

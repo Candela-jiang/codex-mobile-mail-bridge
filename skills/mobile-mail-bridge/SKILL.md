@@ -1,13 +1,13 @@
 ---
 name: mobile-mail-bridge
-description: Install, configure, start, stop, status-check, and troubleshoot the Codex Mobile Mail Bridge plugin. Use when Codex needs to email local computer-side work reports to a phone, poll Gmail for whitelisted [codex] follow-up instructions, preserve an existing notify hook, or explain the security boundary for email-triggered local Codex tasks.
+description: Install, configure, start, stop, status-check, and troubleshoot the Codex Mobile Mail Bridge plugin. Use when Codex needs to email Chinese local computer-side work reports to a phone, poll Gmail for whitelisted [codex-next] follow-up instructions, preserve an existing notify hook, or explain the security boundary for email-triggered local Codex tasks.
 ---
 
 # Mobile Mail Bridge
 
 ## Purpose
 
-Use this skill to set up or operate a local email bridge for Codex work. The bridge is for mobile supervision of desktop work: Codex sends a computer-side report after each turn, and the user can reply by email with the next project instruction.
+Use this skill to set up or operate a local email bridge for Codex work. The bridge is for mobile supervision of desktop work: Codex sends a Chinese computer-side report after each turn, and the user can reply by email with the next project instruction.
 
 ## Locate Scripts
 
@@ -44,12 +44,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Install-CodexMobi
 
 - Outbound reports are triggered through Codex `notify` on `agent-turn-complete`.
 - The installer backs up `config.toml`, installs the bridge as the new `notify`, and stores any previous `notify` command as `original_notify`.
-- Inbox commands are accepted only from configured `allowed_senders` and only when the subject contains `[codex]`.
+- Inbox commands are accepted only from configured `allowed_senders` and only when the subject contains `[codex-next]`.
 - Email-triggered commands run through `codex exec` in the configured `codex_sandbox`.
 
 ## Report Contents
 
-The email report should help a phone-only user decide the next instruction. It includes:
+The email report should be written in Chinese by default and help a phone-only user decide the next instruction. It includes:
 
 - AI model and provider from Codex config when available.
 - project label and working directory.

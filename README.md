@@ -4,9 +4,9 @@ Codex Mobile Mail Bridge turns a local Codex desktop or CLI workflow into a mobi
 
 It can:
 
-- send email work reports when a Codex turn completes;
+- send Chinese email work reports when a Codex turn completes;
 - include model, task name, project path, Git branch, changed files, and diff stat;
-- poll a Gmail inbox for whitelisted messages whose subject contains `[codex]`;
+- poll a Gmail inbox for whitelisted messages whose subject contains `[codex-next]`;
 - run those email instructions through local `codex exec` in a conservative sandbox;
 - email the result back so the user can continue guiding a desktop project from a phone.
 
@@ -64,7 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\mob
 
 Send an email to the configured Gmail inbox from an allowed sender.
 
-- Subject must contain `[codex]`.
+- Subject must contain `[codex-next]`.
 - Body is the next project instruction.
 - The default sandbox is `read-only`.
 
