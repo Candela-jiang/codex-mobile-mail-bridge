@@ -1,0 +1,29 @@
+{
+  "enabled": false,
+  "sender": "your-address@gmail.com",
+  "recipients": [
+    "your-address@gmail.com"
+  ],
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "imap_host": "imap.gmail.com",
+  "imap_port": 993,
+  "password_env": "CODEX_GMAIL_APP_PASSWORD",
+  "dpapi_secret_file": "gmail_app_password.dpapi",
+  "subject_prefix": "[Codex]",
+  "inbox_enabled": false,
+  "inbox_subject_tag": "[codex]",
+  "allowed_senders": [
+    "your-address@gmail.com"
+  ],
+  "poll_seconds": 60,
+  "codex_cwd": "C:\\path\\to\\your\\project",
+  "codex_exe": "codex",
+  "codex_sandbox": "read-only",
+  "codex_timeout_seconds": 1800,
+  "include_git_summary": true,
+  "max_git_files": 30,
+  "mobile_reply_hint": "Reply with subject containing [codex]. Put the next project instruction in the email body.",
+  "max_body_chars": 15000,
+  "original_notify": []
+}

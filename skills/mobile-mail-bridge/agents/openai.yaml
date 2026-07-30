@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mobile Mail Bridge"
+  short_description: "Mobile email bridge for Codex work."
+  default_prompt: "Help me install, start, stop, or troubleshoot the Codex Mobile Mail Bridge."

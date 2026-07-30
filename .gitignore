@@ -1,0 +1,8 @@
+config.json
+gmail_app_password.dpapi
+mail-bridge.log
+inbox-monitor.pid
+__pycache__/
+*.pyc
+.env
+.DS_Store

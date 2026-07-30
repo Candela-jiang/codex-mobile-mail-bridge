@@ -1,0 +1,18 @@
+{
+  "name": "codex-mobile-mail-bridge",
+  "version": "0.1.0",
+  "description": "Email-based mobile supervision and follow-up command loop for local Codex work.",
+  "author": {
+    "name": "Candela-jiang"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Mobile Mail Bridge",
+    "shortDescription": "Send local Codex work reports by email and accept safe mobile follow-up instructions.",
+    "longDescription": "Codex Mobile Mail Bridge installs a local email bridge that sends computer-side Codex work reports to configured recipients and polls a mailbox for whitelisted follow-up instructions tagged with [codex].",
+    "developerName": "Candela-jiang",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me configure and run the Codex Mobile Mail Bridge."
+  }
+}
