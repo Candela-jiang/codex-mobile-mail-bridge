@@ -47,5 +47,11 @@ if (-not $existing) {
 
 Write-Host "Phone workflow:"
 Write-Host "1. Codex turn reports will be emailed to the configured recipients."
-Write-Host "2. Subject $($config.inbox_subject_tag) starts a new background command."
-Write-Host "3. Subject [codex-next:session-id-or-task-name] targets an existing Codex session."
+$delivery = $(if ($config.PSObject.Properties.Name -contains "command_delivery") { $config.command_delivery } else { "exec" })
+if ($delivery -eq "app_queue") {
+  Write-Host "2. Subject $($config.inbox_subject_tag) is queued for visible delivery to the default Codex task."
+  Write-Host "3. Subject [codex-next:task-id-or-task-name] targets another Codex task."
+} else {
+  Write-Host "2. Subject $($config.inbox_subject_tag) starts a new background command."
+  Write-Host "3. Subject [codex-next:session-id-or-task-name] targets an existing Codex session."
+}

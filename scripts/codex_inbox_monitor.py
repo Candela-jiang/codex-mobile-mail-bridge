@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import time
 import traceback
+import uuid
 from datetime import datetime
 from email.header import decode_header
 from email.message import EmailMessage
@@ -30,6 +31,7 @@ from codex_notify_email import (
 
 PROCESSED_IDS_PATH = ROOT / "processed_message_ids.json"
 MAX_PROCESSED_IDS = 500
+DEFAULT_APP_QUEUE_PATH = ROOT / "pending_app_commands.jsonl"
 
 
 def inbox_tag_name(config: dict) -> str:
@@ -59,6 +61,63 @@ def route_label(route: dict) -> str:
     if route.get("mode") == "resume":
         return f"指定会话: {route.get('target')}"
     return "新后台任务"
+
+
+def command_delivery(config: dict) -> str:
+    value = str(config.get("command_delivery") or "exec").strip().lower()
+    if value in {"app", "app_queue", "queue"}:
+        return "app_queue"
+    return "exec"
+
+
+def app_queue_path(config: dict) -> Path:
+    configured = str(config.get("app_queue_path") or "").strip()
+    return Path(configured).expanduser() if configured else DEFAULT_APP_QUEUE_PATH
+
+
+def build_app_prompt(from_addr: str, subject: str, body: str, route: dict) -> str:
+    return "\n".join(
+        [
+            "邮件命令投递",
+            "",
+            "这条消息来自用户通过手机邮箱发送的 Codex 后续指令。",
+            "请把它当作用户在当前任务里继续发出的真实命令处理，而不是普通邮件聊天。",
+            "请始终用中文回复。完成后，正常给出你检查了什么、实际做了什么、还剩什么。",
+            "",
+            f"来源邮箱: {from_addr}",
+            f"邮件主题: {subject}",
+            f"邮件路由: {route_label(route)}",
+            "",
+            "用户指令:",
+            body.strip() or "（邮件正文为空）",
+        ]
+    )
+
+
+def queue_app_command(config: dict, from_addr: str, subject: str, body: str, route: dict, message_identity: str) -> dict:
+    target = str(route.get("target") or "").strip()
+    if not target:
+        target = str(config.get("default_target_session") or "").strip()
+    if not target:
+        raise ValueError("app_queue delivery requires an explicit target or default_target_session")
+
+    entry = {
+        "version": 1,
+        "id": hashlib.sha256(f"{message_identity}\n{uuid.uuid4()}".encode("utf-8")).hexdigest()[:24],
+        "received_at": datetime.now().isoformat(timespec="seconds"),
+        "from": from_addr,
+        "subject": subject,
+        "route": {"mode": "resume", "target": target},
+        "target": target,
+        "body": body.strip(),
+        "prompt": build_app_prompt(from_addr, subject, body, {"mode": "resume", "target": target}),
+    }
+    queue_path = app_queue_path(config)
+    queue_path.parent.mkdir(parents=True, exist_ok=True)
+    with queue_path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    log(f"app command queued: id={entry['id']} target={target}")
+    return entry
 
 
 def decode_value(value: str) -> str:
@@ -267,10 +326,24 @@ def process_once(config: dict) -> int:
             if from_addr not in allowed or not route:
                 continue
             log(f"inbox command accepted from {from_addr}: {subject}")
-            try:
-                final = run_codex_from_email(config, from_addr, subject, body, route)
-            except Exception:
-                final = "Codex email command crashed:\n\n" + traceback.format_exc()
+            delivery = command_delivery(config)
+            if delivery == "app_queue":
+                try:
+                    queued = queue_app_command(config, from_addr, subject, body, route, message_identity)
+                    final = "\n".join(
+                        [
+                            "已收到，并已排队投递到 Codex App 任务。",
+                            f"目标任务: {queued['target']}",
+                            "通常 1 分钟内会出现在对应 Codex 任务里；任务完成后，会按普通 Codex 工作报告继续发邮件。",
+                        ]
+                    )
+                except Exception:
+                    final = "Codex App 邮件命令入队失败:\n\n" + traceback.format_exc()
+            else:
+                try:
+                    final = run_codex_from_email(config, from_addr, subject, body, route)
+                except Exception:
+                    final = "Codex email command crashed:\n\n" + traceback.format_exc()
             meta_notification = {
                 "cwd": config.get("codex_cwd", ""),
                 "input-messages": [body],
@@ -284,6 +357,7 @@ def process_once(config: dict) -> int:
                 metadata_block(meta_notification, config, subject),
                 f"来源: {from_addr}",
                 f"路由: {route_label(route)}",
+                f"投递: {'Codex App 可见任务' if delivery == 'app_queue' else '后台 Codex CLI'}",
             ]
             if evidence:
                 reply_parts.extend(["", "电脑端:", evidence])

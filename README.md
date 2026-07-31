@@ -9,8 +9,9 @@ It can:
 - include model, task name, project path, Git branch, changed files, and diff stat;
 - keep report email subjects compact, with full project metadata in the body;
 - poll a Gmail inbox for whitelisted messages whose subject contains `[codex-next]`;
-- run those email instructions through local `codex exec` in a conservative sandbox;
-- resume a specific existing Codex session when the subject uses `[codex-next:session-id-or-task-name]`;
+- either run those email instructions through local `codex exec` in a conservative sandbox,
+  or queue them for visible delivery into a Codex App task;
+- resume a specific existing Codex task when the subject uses `[codex-next:task-id-or-task-name]`;
 - email the result back so the user can continue guiding a desktop project from a phone.
 
 This is intended for local, user-owned machines. It is not an official OpenAI email interface.
@@ -82,7 +83,7 @@ Send an email to the configured Gmail inbox from an allowed sender.
 - Body is the next project instruction.
 - The default sandbox is `read-only`.
 
-To target an existing Codex conversation, put the target after a colon:
+To target an existing Codex task, put the target after a colon:
 
 ```text
 [codex-next:019fb407-95d7-7940-b687-b85ea0226ebe]
@@ -94,9 +95,16 @@ You can also use a task name when it is unique enough:
 [codex-next:codex-moblie-mail-bridge]
 ```
 
-Plain `[codex-next]` starts a new background `codex exec` task. Targeted
-subjects use `codex exec resume --all <target> -`, so the command is attached
-to the chosen Codex session.
+In the default CLI mode, plain `[codex-next]` starts a new background
+`codex exec` task. Targeted subjects use `codex exec resume --all <target> -`.
+
+In App-visible mode, set `command_delivery` to `app_queue` and configure
+`default_target_session`. Then plain `[codex-next]` is queued for that default
+Codex task, while `[codex-next:task-id-or-task-name]` targets a specific task.
+An App heartbeat automation must relay `pending_app_commands.jsonl` with the
+instructions in `scripts/CodexAppRelayPrompt.md`; this is what makes the phone
+command appear in the Codex desktop task instead of only running in the
+background.
 
 The reply email includes a work report and project evidence after the command runs.
 

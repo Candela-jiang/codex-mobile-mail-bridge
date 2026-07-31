@@ -12,6 +12,8 @@ param(
   [string]$CodexSandbox = "read-only",
   [ValidateSet("exec", "resume")]
   [string]$CommandMode = "exec",
+  [ValidateSet("exec", "app_queue")]
+  [string]$CommandDelivery = "exec",
   [string]$DefaultTargetSession = "",
   [int]$PollSeconds = 60,
   [switch]$SkipConfigUpdate
@@ -26,6 +28,7 @@ $installerArgs = @(
   "--codex-cwd", $CodexCwd,
   "--codex-exe", $CodexExe,
   "--codex-sandbox", $CodexSandbox,
+  "--command-delivery", $CommandDelivery,
   "--command-mode", $CommandMode,
   "--poll-seconds", "$PollSeconds"
 )

@@ -22,8 +22,10 @@ if (Test-Path -LiteralPath $pidPath) {
   Recipients = ($config.recipients -join ", ")
   AllowedSenders = ($config.allowed_senders -join ", ")
   SubjectTag = $config.inbox_subject_tag
+  CommandDelivery = $(if ($config.PSObject.Properties.Name -contains "command_delivery") { $config.command_delivery } else { "exec" })
   CommandMode = $config.command_mode
   DefaultTargetSession = $config.default_target_session
+  AppQueuePath = $(if ($config.PSObject.Properties.Name -contains "app_queue_path") { $config.app_queue_path } else { "" })
   PythonExe = $config.python_exe
   CodexCwd = $config.codex_cwd
   Sandbox = $config.codex_sandbox
