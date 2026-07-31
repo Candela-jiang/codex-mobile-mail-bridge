@@ -25,6 +25,7 @@ from codex_notify_email import (
     ROOT,
     get_password,
     git_status_report,
+    compact_metadata_block,
     lookup_mail_route_by_message_ids,
     lookup_mail_route_by_subject,
     load_config,
@@ -75,11 +76,10 @@ def resolve_reply_route(message: Message, subject: str):
     message_ids: list[str] = []
     for key in ("In-Reply-To", "References"):
         message_ids.extend(header_message_ids(message.get(key, "")))
-    route = lookup_mail_route_by_message_ids(message_ids)
-    source = "reply-header"
-    if not route:
-        route = lookup_mail_route_by_subject(subject)
-        source = "reply-subject"
+    subject_route = lookup_mail_route_by_subject(subject)
+    header_route = lookup_mail_route_by_message_ids(message_ids)
+    route = subject_route or header_route
+    source = "reply-subject" if subject_route else "reply-header"
     if route and route.get("thread_id"):
         return {
             "mode": "resume",
@@ -260,7 +260,7 @@ def is_bridge_generated_message(config: dict, from_addr: str, raw_body: str, mes
     if not sender or from_addr != sender:
         return False
     body_start = str(raw_body or "").lstrip()[:120]
-    return body_start.startswith("Codex 邮箱指令回执")
+    return body_start.startswith("Codex 邮箱指令回执") or body_start.startswith("Codex 回执")
 
 
 def send_plain_email(config: dict, to_addr: str, subject: str, body: str, in_reply_to: str = "") -> None:
@@ -434,13 +434,8 @@ def process_once(config: dict) -> int:
             }
             evidence = git_status_report(route.get("cwd") or config.get("codex_cwd", ""), config)
             reply_parts = [
-                "Codex 邮箱指令回执",
-                "",
-                f"时间: {datetime.now().strftime('%m-%d %H:%M')}",
-                metadata_block(meta_notification, config, subject),
-                f"来源: {from_addr}",
-                f"路由: {route_label(route)}",
-                f"投递: {'Codex App 可见任务' if delivery == 'app_queue' else '后台 Codex CLI'}",
+                f"Codex 回执  {datetime.now().strftime('%m-%d %H:%M')}",
+                compact_metadata_block(meta_notification, config, subject),
             ]
             if evidence:
                 reply_parts.extend(["", "电脑端:", evidence])
@@ -450,7 +445,7 @@ def process_once(config: dict) -> int:
                     "结果:",
                     final,
                     "",
-                    "下一步:",
+                    "回复:",
                     mobile_reply_hint(config),
                 ]
             )

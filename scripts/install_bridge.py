@@ -150,9 +150,9 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "app_queue_path": "",
         "command_mode": args.command_mode,
         "default_target_session": args.default_target_session,
-        "include_git_summary": True,
+        "include_git_summary": False,
         "max_git_files": 30,
-        "mobile_reply_hint": "直接回复这封邮件即可继续同一个 Codex 任务；新任务请另发邮件并让主题包含 [codex-next]。",
+        "mobile_reply_hint": "回复本邮件继续；新任务主题写 [codex-next]。",
         "max_body_chars": 15000,
         "original_notify": original_notify,
     }

@@ -140,8 +140,20 @@ def strip_reply_prefixes_subject(subject: str) -> str:
     value = str(subject or "").strip()
     while True:
         lowered = value.lower()
-        if lowered.startswith("re:") or lowered.startswith("fw:") or lowered.startswith("fwd:"):
-            value = value.split(":", 1)[1].strip()
+        reply_prefixes = (
+            "re:",
+            "fw:",
+            "fwd:",
+            "回复:",
+            "回复：",
+            "答复:",
+            "答复：",
+            "转发:",
+            "转发：",
+        )
+        matched_prefix = next((prefix for prefix in reply_prefixes if lowered.startswith(prefix)), "")
+        if matched_prefix:
+            value = value[len(matched_prefix) :].strip()
             continue
         return value
 
@@ -456,6 +468,25 @@ def metadata_block(notification: dict, config: dict, task_name: str = "") -> str
     return "\n".join(metadata_lines(notification, config, task_name))
 
 
+def compact_metadata_lines(notification: dict, config: dict, task_name: str = "") -> list[str]:
+    codex_config = load_codex_config()
+    cwd = notification.get("cwd") or config.get("codex_cwd") or ""
+    resolved_task_name = task_name or resolve_task_name(notification, config)
+    lines = [
+        f"任务: {resolved_task_name}",
+        f"项目: {short_project_label(resolve_project_label(cwd, codex_config))}",
+        f"模型: {resolve_model_label(notification, codex_config)}",
+    ]
+    thread_id = notification_thread_id(notification, resolved_task_name)
+    if thread_id and config.get("include_thread_id_in_body", True):
+        lines.append(f"ID: {thread_id}")
+    return lines
+
+
+def compact_metadata_block(notification: dict, config: dict, task_name: str = "") -> str:
+    return "\n".join(compact_metadata_lines(notification, config, task_name))
+
+
 def truncate_text(value: str, limit: int) -> str:
     text = str(value or "").strip()
     if len(text) <= limit:
@@ -617,7 +648,7 @@ def git_status_report(cwd: str, config: dict) -> str:
 def mobile_reply_hint(config: dict) -> str:
     return str(
         config.get("mobile_reply_hint")
-        or "用手机回邮件时，请让主题包含 [codex-next]，正文写项目的下一步指令。"
+        or "回复本邮件继续；新任务主题写 [codex-next]。"
     )
 
 
@@ -628,10 +659,8 @@ def build_body(notification: dict, config: dict) -> str:
     cwd = notification.get("cwd", "")
     evidence = git_status_report(cwd, config)
     body_parts = [
-        "Codex 工作报告",
-        "",
-        f"时间: {datetime.now().strftime('%m-%d %H:%M')}",
-        metadata_block(notification, config, task_name),
+        f"Codex 报告  {datetime.now().strftime('%m-%d %H:%M')}",
+        compact_metadata_block(notification, config, task_name),
         "",
         "指令:",
         user_instruction,
@@ -644,7 +673,7 @@ def build_body(notification: dict, config: dict) -> str:
             "结果:",
             truncate_text(assistant_message.strip() or "（空）", 5000),
             "",
-            "下一步:",
+            "回复:",
             mobile_reply_hint(config),
         ]
     )
