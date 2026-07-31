@@ -8,11 +8,11 @@ It can:
 - send Chinese email work reports when a Codex turn completes;
 - include model, task name, project path, Git branch, changed files, and diff stat;
 - keep report email subjects compact, with full project metadata in the body;
-- poll a Gmail inbox for whitelisted messages whose subject contains `[codex-next]`;
-- either run those email instructions through local `codex exec` in a conservative sandbox,
-  or queue them for visible delivery into a Codex App task;
-- resume a specific existing Codex task when the subject uses `[codex-next:task-id-or-task-name]`;
-- email the result back so the user can continue guiding a desktop project from a phone.
+- save a local mapping from report email `Message-ID` to the originating Codex task;
+- watch Gmail with IMAP IDLE, waking when mail arrives instead of interrupting a Codex task every minute;
+- let the user reply to a report email to continue the same task automatically;
+- run email instructions through local `codex exec` in a conservative sandbox;
+- email the final result back so the user can keep guiding desktop work from a phone.
 
 This is intended for local, user-owned machines. It is not an official OpenAI email interface.
 
@@ -79,11 +79,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\mob
 
 Send an email to the configured Gmail inbox from an allowed sender.
 
-- Subject must contain `[codex-next]`.
-- Body is the next project instruction.
+- To continue an existing task, reply directly to that task's Codex report email.
+- The bridge uses email reply headers to route the instruction back to the original Codex task.
+- Body is the next project instruction; quoted old email content is removed before execution.
 - The default sandbox is `read-only`.
 
-To target an existing Codex task, put the target after a colon:
+To target an existing Codex task without replying to a report, put the target after a colon:
 
 ```text
 [codex-next:019fb407-95d7-7940-b687-b85ea0226ebe]
@@ -95,18 +96,22 @@ You can also use a task name when it is unique enough:
 [codex-next:codex-moblie-mail-bridge]
 ```
 
-In the default CLI mode, plain `[codex-next]` starts a new background
-`codex exec` task. Targeted subjects use `codex exec resume --all <target> -`.
-
-In App-visible mode, set `command_delivery` to `app_queue` and configure
-`default_target_session`. Then plain `[codex-next]` is queued for that default
-Codex task, while `[codex-next:task-id-or-task-name]` targets a specific task.
-An App heartbeat automation must relay `pending_app_commands.jsonl` with the
-instructions in `scripts/CodexAppRelayPrompt.md`; this is what makes the phone
-command appear in the Codex desktop task instead of only running in the
-background.
+Plain `[codex-next]` starts a new background `codex exec` task. Targeted
+subjects use `codex exec resume --all <target> -`.
 
 The reply email includes a work report and project evidence after the command runs.
+
+## Routing Notes
+
+Outgoing report emails get a generated `Message-ID` and a local route record in
+runtime `mail_thread_routes.json`. When a whitelisted sender replies to that
+message, the inbox monitor reads `In-Reply-To` / `References` and resumes the
+original Codex task. If an email client drops those headers, the bridge falls
+back to the compact report subject.
+
+The older `app_queue` / Codex App heartbeat relay is kept only for experiments.
+It is not the recommended phone workflow because it can interrupt the bridge
+task and does not own the final email reply.
 
 ## Report Subjects
 

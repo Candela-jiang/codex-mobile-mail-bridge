@@ -139,6 +139,8 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "inbox_subject_tag": args.subject_tag,
         "allowed_senders": allowed,
         "poll_seconds": args.poll_seconds,
+        "imap_idle_enabled": True,
+        "idle_wait_seconds": 300,
         "python_exe": sys.executable,
         "codex_cwd": str(Path(args.codex_cwd).expanduser()),
         "codex_exe": args.codex_exe,
@@ -150,7 +152,7 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "default_target_session": args.default_target_session,
         "include_git_summary": True,
         "max_git_files": 30,
-        "mobile_reply_hint": "用手机回邮件时，主题写 [codex-next] 可投递到默认 Codex 任务；写 [codex-next:会话ID或任务名] 可指定已有 Codex 任务。",
+        "mobile_reply_hint": "直接回复这封邮件即可继续同一个 Codex 任务；新任务请另发邮件并让主题包含 [codex-next]。",
         "max_body_chars": 15000,
         "original_notify": original_notify,
     }

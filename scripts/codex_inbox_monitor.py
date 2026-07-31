@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import email
 import hashlib
+import html
 import imaplib
+import os
 import re
+import select
 import smtplib
 import subprocess
 import tempfile
@@ -22,10 +25,13 @@ from codex_notify_email import (
     ROOT,
     get_password,
     git_status_report,
+    lookup_mail_route_by_message_ids,
+    lookup_mail_route_by_subject,
     load_config,
     log,
     metadata_block,
     mobile_reply_hint,
+    normalize_email_message_id,
     safe_existing_cwd,
 )
 
@@ -55,6 +61,34 @@ def resolve_command_route(config: dict, subject: str):
     if target:
         return {"mode": "resume", "target": target}
     return {"mode": "exec", "target": ""}
+
+
+def header_message_ids(value: str) -> list[str]:
+    return [
+        normalize_email_message_id(match)
+        for match in re.findall(r"<([^>]+)>", str(value or ""))
+        if normalize_email_message_id(match)
+    ]
+
+
+def resolve_reply_route(message: Message, subject: str):
+    message_ids: list[str] = []
+    for key in ("In-Reply-To", "References"):
+        message_ids.extend(header_message_ids(message.get(key, "")))
+    route = lookup_mail_route_by_message_ids(message_ids)
+    source = "reply-header"
+    if not route:
+        route = lookup_mail_route_by_subject(subject)
+        source = "reply-subject"
+    if route and route.get("thread_id"):
+        return {
+            "mode": "resume",
+            "target": str(route["thread_id"]),
+            "source": source,
+            "task_name": str(route.get("task_name") or ""),
+            "cwd": str(route.get("cwd") or ""),
+        }
+    return None
 
 
 def route_label(route: dict) -> str:
@@ -143,6 +177,27 @@ def get_text_body(message: Message) -> str:
     return payload.decode(message.get_content_charset() or "utf-8", errors="replace")
 
 
+def clean_reply_body(value: str) -> str:
+    text = html.unescape(str(value or ""))
+    split_markers = [
+        r"(?im)^\s*---+\s*Original\s*---+\s*$",
+        r"(?im)^\s*-{2,}\s*Original Message\s*-{2,}\s*$",
+        r"(?im)^\s*From:\s+.+$",
+        r"(?im)^\s*发件人:\s+.+$",
+        r"(?im)^On .+ wrote:\s*$",
+    ]
+    cut_at = len(text)
+    for marker in split_markers:
+        match = re.search(marker, text)
+        if match:
+            cut_at = min(cut_at, match.start())
+    text = text[:cut_at]
+    text = re.sub(r"(?m)^\s*>.*$", "", text)
+    text = re.sub(r"(?m)^\s*(洪宇江|2265724395@qq\.com|7735139@gmail\.com)\s*$", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def strip_reply_prefixes(subject: str) -> str:
     value = subject.strip()
     while True:
@@ -198,7 +253,17 @@ def is_self_report(config: dict, from_addr: str, subject: str) -> bool:
     return bool(prefix and core_subject.startswith(prefix)) or bool(config.get("self_report_subject_is_task_name", True))
 
 
-def send_plain_email(config: dict, to_addr: str, subject: str, body: str) -> None:
+def is_bridge_generated_message(config: dict, from_addr: str, raw_body: str, message: Message) -> bool:
+    if message.get("X-Codex-Mail-Bridge"):
+        return True
+    sender = str(config.get("sender", "")).lower()
+    if not sender or from_addr != sender:
+        return False
+    body_start = str(raw_body or "").lstrip()[:120]
+    return body_start.startswith("Codex 邮箱指令回执")
+
+
+def send_plain_email(config: dict, to_addr: str, subject: str, body: str, in_reply_to: str = "") -> None:
     password = get_password(config)
     if not password:
         log("reply skipped: Gmail app password is not configured")
@@ -212,6 +277,12 @@ def send_plain_email(config: dict, to_addr: str, subject: str, body: str) -> Non
     message["From"] = config["sender"]
     message["To"] = to_addr
     message["Subject"] = subject
+    message["X-Codex-Mail-Bridge"] = "reply"
+    if in_reply_to:
+        normalized = normalize_email_message_id(in_reply_to)
+        if normalized:
+            message["In-Reply-To"] = f"<{normalized}>"
+            message["References"] = f"<{normalized}>"
     message.set_content(body)
 
     with smtplib.SMTP(config.get("smtp_host", "smtp.gmail.com"), int(config.get("smtp_port", 587)), timeout=30) as smtp:
@@ -265,6 +336,8 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
             str(out_path),
             "-",
         ]
+    child_env = os.environ.copy()
+    child_env["CODEX_MAIL_BRIDGE_SUPPRESS_NOTIFY"] = "1"
     result = subprocess.run(
         cmd,
         input=prompt,
@@ -274,6 +347,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
         capture_output=True,
         timeout=int(config.get("codex_timeout_seconds", 1800)),
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        env=child_env,
     )
     final = ""
     if out_path.exists():
@@ -312,9 +386,19 @@ def process_once(config: dict) -> int:
             message = email.message_from_bytes(raw)
             from_addr = parseaddr(decode_value(message.get("From", "")))[1].lower()
             subject = decode_value(message.get("Subject", ""))
-            body = get_text_body(message)
-            message_identity = build_message_identity(from_addr, subject, body, message.get("Message-ID", ""))
-            if is_self_report(config, from_addr, subject):
+            raw_body = get_text_body(message)
+            if is_bridge_generated_message(config, from_addr, raw_body, message):
+                log(f"inbox skipped bridge-generated message: {subject}")
+                imap.store(msg_id, "+FLAGS", "\\Seen")
+                continue
+            body = clean_reply_body(raw_body)
+            message_identity = build_message_identity(from_addr, subject, raw_body, message.get("Message-ID", ""))
+            route = resolve_command_route(config, subject) or resolve_reply_route(message, subject)
+            if is_self_report(config, from_addr, subject) and route and route.get("source") == "reply-subject":
+                log(f"inbox skipped self report: {subject}")
+                imap.store(msg_id, "+FLAGS", "\\Seen")
+                continue
+            if is_self_report(config, from_addr, subject) and not route:
                 log(f"inbox skipped self report: {subject}")
                 imap.store(msg_id, "+FLAGS", "\\Seen")
                 continue
@@ -322,7 +406,6 @@ def process_once(config: dict) -> int:
                 log(f"inbox skipped duplicate: {subject}")
                 imap.store(msg_id, "+FLAGS", "\\Seen")
                 continue
-            route = resolve_command_route(config, subject)
             if from_addr not in allowed or not route:
                 continue
             log(f"inbox command accepted from {from_addr}: {subject}")
@@ -345,11 +428,11 @@ def process_once(config: dict) -> int:
                 except Exception:
                     final = "Codex email command crashed:\n\n" + traceback.format_exc()
             meta_notification = {
-                "cwd": config.get("codex_cwd", ""),
+                "cwd": route.get("cwd") or config.get("codex_cwd", ""),
                 "input-messages": [body],
-                "task-name": subject,
+                "task-name": route.get("task_name") or subject,
             }
-            evidence = git_status_report(config.get("codex_cwd", ""), config)
+            evidence = git_status_report(route.get("cwd") or config.get("codex_cwd", ""), config)
             reply_parts = [
                 "Codex 邮箱指令回执",
                 "",
@@ -372,7 +455,7 @@ def process_once(config: dict) -> int:
                 ]
             )
             reply_body = "\n".join(reply_parts)
-            send_plain_email(config, from_addr, f"Re: {subject}", reply_body)
+            send_plain_email(config, from_addr, f"Re: {subject}", reply_body, message.get("Message-ID", ""))
             processed_set.add(message_identity)
             processed_ids.append(message_identity)
             save_processed_message_ids(processed_ids)
@@ -381,12 +464,47 @@ def process_once(config: dict) -> int:
     return processed
 
 
+def wait_for_inbox_activity(config: dict, timeout_seconds: int) -> None:
+    if not config.get("imap_idle_enabled", True):
+        time.sleep(timeout_seconds)
+        return
+
+    password = get_password(config)
+    if not password:
+        time.sleep(timeout_seconds)
+        return
+
+    try:
+        with imaplib.IMAP4_SSL(config.get("imap_host", "imap.gmail.com"), int(config.get("imap_port", 993))) as imap:
+            imap.login(config["sender"], password)
+            imap.select("INBOX")
+            tag = imap._new_tag()
+            tag_bytes = tag if isinstance(tag, bytes) else str(tag).encode("ascii", errors="ignore")
+            imap.send(tag_bytes + b" IDLE\r\n")
+            line = imap.readline()
+            if not line.startswith(b"+"):
+                return
+
+            ready, _write, _error = select.select([imap.sock], [], [], max(1, timeout_seconds))
+            imap.send(b"DONE\r\n")
+            while True:
+                line = imap.readline()
+                if not line or line.startswith(tag_bytes):
+                    break
+            if ready:
+                log("inbox idle woke: mailbox activity detected")
+    except Exception as exc:
+        log(f"inbox idle fallback: {exc}")
+        time.sleep(min(30, max(1, timeout_seconds)))
+
+
 def main() -> int:
     while True:
-        sleep_seconds = 60
+        config = {}
+        wait_seconds = 60
         try:
             config = load_config()
-            sleep_seconds = int(config.get("poll_seconds", 60))
+            wait_seconds = int(config.get("idle_wait_seconds") or config.get("poll_seconds", 60))
             if not config.get("inbox_enabled", False):
                 log("inbox monitor stopped: disabled")
                 return 0
@@ -398,7 +516,7 @@ def main() -> int:
             return 0
         except Exception:
             log("inbox monitor error:\n" + traceback.format_exc())
-        time.sleep(sleep_seconds)
+        wait_for_inbox_activity(config, wait_seconds)
 
 
 if __name__ == "__main__":

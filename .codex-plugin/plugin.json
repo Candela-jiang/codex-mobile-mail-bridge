@@ -1,6 +1,6 @@
 {
   "name": "codex-mobile-mail-bridge",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Email-based mobile supervision and follow-up command loop for local Codex work.",
   "author": {
     "name": "Candela-jiang"
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Codex Mobile Mail Bridge",
     "shortDescription": "Phone-friendly Codex reports and safe Gmail follow-ups.",
-    "longDescription": "Codex Mobile Mail Bridge turns local Codex turns into email reports, then lets Gmail messages tagged with [codex-next] feed safe follow-up instructions back into the same local workflow, including optional visible delivery into Codex App tasks.",
+    "longDescription": "Codex Mobile Mail Bridge turns local Codex turns into email reports, then lets phone replies route back to the original local Codex task and email the final result after execution.",
     "developerName": "Candela-jiang",
     "category": "Productivity",
     "capabilities": [],

@@ -26,6 +26,8 @@ if (Test-Path -LiteralPath $pidPath) {
   CommandMode = $config.command_mode
   DefaultTargetSession = $config.default_target_session
   AppQueuePath = $(if ($config.PSObject.Properties.Name -contains "app_queue_path") { $config.app_queue_path } else { "" })
+  ImapIdleEnabled = $(if ($config.PSObject.Properties.Name -contains "imap_idle_enabled") { $config.imap_idle_enabled } else { $false })
+  IdleWaitSeconds = $(if ($config.PSObject.Properties.Name -contains "idle_wait_seconds") { $config.idle_wait_seconds } else { "" })
   PythonExe = $config.python_exe
   CodexCwd = $config.codex_cwd
   Sandbox = $config.codex_sandbox

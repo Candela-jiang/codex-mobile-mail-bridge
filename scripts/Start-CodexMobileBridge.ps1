@@ -49,9 +49,9 @@ Write-Host "Phone workflow:"
 Write-Host "1. Codex turn reports will be emailed to the configured recipients."
 $delivery = $(if ($config.PSObject.Properties.Name -contains "command_delivery") { $config.command_delivery } else { "exec" })
 if ($delivery -eq "app_queue") {
-  Write-Host "2. Subject $($config.inbox_subject_tag) is queued for visible delivery to the default Codex task."
-  Write-Host "3. Subject [codex-next:task-id-or-task-name] targets another Codex task."
+  Write-Host "2. Legacy app_queue mode is enabled; use only if you also run a Codex App relay."
+  Write-Host "3. Recommended mode is exec, which replies with the final result by email."
 } else {
-  Write-Host "2. Subject $($config.inbox_subject_tag) starts a new background command."
-  Write-Host "3. Subject [codex-next:session-id-or-task-name] targets an existing Codex session."
+  Write-Host "2. Reply to a Codex report email to continue that same task automatically."
+  Write-Host "3. Subject $($config.inbox_subject_tag) starts a new background task; [codex-next:task-id-or-task-name] targets one explicitly."
 }

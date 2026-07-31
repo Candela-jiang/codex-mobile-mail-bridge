@@ -9,6 +9,7 @@ import sys
 import traceback
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import make_msgid
 from pathlib import Path
 
 try:
@@ -25,6 +26,8 @@ CODEX_CONFIG_PATH = Path(os.environ.get("CODEX_CONFIG_PATH", Path.home() / ".cod
 SESSION_INDEX_PATH = Path(os.environ.get("CODEX_SESSION_INDEX_PATH", Path.home() / ".codex" / "session_index.jsonl"))
 SESSIONS_ROOT = Path(os.environ.get("CODEX_SESSIONS_ROOT", Path.home() / ".codex" / "sessions"))
 LOG_PATH = ROOT / "mail-bridge.log"
+MAIL_ROUTES_PATH = ROOT / "mail_thread_routes.json"
+MAX_MAIL_ROUTES = 500
 
 
 def log(message: str) -> None:
@@ -127,6 +130,103 @@ def clean_subject(value: str) -> str:
     if len(value) > 90:
         value = value[:87] + "..."
     return value or "Codex task"
+
+
+def normalize_email_message_id(value: str) -> str:
+    return str(value or "").strip().strip("<>").lower()
+
+
+def strip_reply_prefixes_subject(subject: str) -> str:
+    value = str(subject or "").strip()
+    while True:
+        lowered = value.lower()
+        if lowered.startswith("re:") or lowered.startswith("fw:") or lowered.startswith("fwd:"):
+            value = value.split(":", 1)[1].strip()
+            continue
+        return value
+
+
+def subject_key(subject: str) -> str:
+    return strip_reply_prefixes_subject(clean_subject(subject)).casefold()
+
+
+def load_mail_routes() -> dict:
+    if not MAIL_ROUTES_PATH.exists():
+        return {"version": 1, "items": []}
+    try:
+        data = json.loads(MAIL_ROUTES_PATH.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return {"version": 1, "items": []}
+    if not isinstance(data, dict):
+        return {"version": 1, "items": []}
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        items = []
+    return {"version": 1, "items": [item for item in items if isinstance(item, dict)]}
+
+
+def save_mail_routes(data: dict) -> None:
+    items = data.get("items", [])
+    if not isinstance(items, list):
+        items = []
+    data["items"] = items[-MAX_MAIL_ROUTES:]
+    MAIL_ROUTES_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def remember_mail_route(message_id: str, notification: dict, config: dict, subject: str, task_name: str) -> None:
+    normalized_id = normalize_email_message_id(message_id)
+    if not normalized_id:
+        return
+    thread_id = notification_thread_id(notification, task_name)
+    if not thread_id:
+        return
+
+    data = load_mail_routes()
+    items = [
+        item
+        for item in data.get("items", [])
+        if normalize_email_message_id(str(item.get("message_id") or "")) != normalized_id
+    ]
+    items.append(
+        {
+            "message_id": normalized_id,
+            "thread_id": thread_id,
+            "task_name": task_name,
+            "subject": subject,
+            "subject_key": subject_key(subject),
+            "cwd": str(notification.get("cwd") or config.get("codex_cwd") or ""),
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+        }
+    )
+    data["items"] = items
+    save_mail_routes(data)
+    log(f"mail route saved: message_id={normalized_id}; thread_id={thread_id}; subject={subject}")
+
+
+def lookup_mail_route_by_message_ids(message_ids: list[str]) -> dict | None:
+    ids = {normalize_email_message_id(item) for item in message_ids if normalize_email_message_id(item)}
+    if not ids:
+        return None
+    for item in reversed(load_mail_routes().get("items", [])):
+        if normalize_email_message_id(str(item.get("message_id") or "")) in ids:
+            return item
+    return None
+
+
+def lookup_mail_route_by_subject(subject: str) -> dict | None:
+    key = subject_key(subject)
+    if not key:
+        return None
+    matches = [
+        item
+        for item in load_mail_routes().get("items", [])
+        if str(item.get("subject_key") or "") == key
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        return matches[-1]
+    return None
 
 
 def strip_subject_noise(value: str) -> str:
@@ -340,11 +440,16 @@ def resolve_project_label(cwd: str, codex_config: dict) -> str:
 def metadata_lines(notification: dict, config: dict, task_name: str = "") -> list[str]:
     codex_config = load_codex_config()
     cwd = notification.get("cwd") or config.get("codex_cwd") or ""
-    return [
+    resolved_task_name = task_name or resolve_task_name(notification, config)
+    thread_id = notification_thread_id(notification, resolved_task_name)
+    lines = [
         f"模型: {resolve_model_label(notification, codex_config)}",
         f"项目: {short_project_label(resolve_project_label(cwd, codex_config))}",
-        f"任务: {task_name or resolve_task_name(notification, config)}",
+        f"任务: {resolved_task_name}",
     ]
+    if thread_id and config.get("include_thread_id_in_body", True):
+        lines.append(f"任务ID: {thread_id}")
+    return lines
 
 
 def metadata_block(notification: dict, config: dict, task_name: str = "") -> str:
@@ -558,22 +663,34 @@ def send_email(notification: dict, config: dict) -> None:
 
     sender = config["sender"]
     recipients = config["recipients"]
+    task_name = resolve_task_name(notification, config)
     subject = build_report_subject(notification, config)
+    thread_id = notification_thread_id(notification, task_name)
+    message_id = make_msgid(idstring=thread_id or "codex", domain="codex-mail-bridge.local")
 
     message = EmailMessage()
     message["From"] = sender
     message["To"] = ", ".join(recipients)
     message["Subject"] = subject
+    message["Message-ID"] = message_id
+    message["X-Codex-Mail-Bridge"] = "report"
+    if thread_id:
+        message["X-Codex-Thread-ID"] = thread_id
+    message["X-Codex-Task-Name"] = task_name
     message.set_content(build_body(notification, config))
 
     with smtplib.SMTP(config.get("smtp_host", "smtp.gmail.com"), int(config.get("smtp_port", 587)), timeout=30) as smtp:
         smtp.starttls()
         smtp.login(sender, password)
         smtp.send_message(message)
+    remember_mail_route(message_id, notification, config, subject, task_name)
     log(f"mail sent to {', '.join(recipients)}; subject={subject}")
 
 
 def main() -> int:
+    if os.environ.get("CODEX_MAIL_BRIDGE_SUPPRESS_NOTIFY") == "1":
+        return 0
+
     raw_notification = os.environ.get("CODEX_MAIL_BRIDGE_TEST_JSON") or (
         sys.argv[1] if len(sys.argv) > 1 else "{}"
     )
