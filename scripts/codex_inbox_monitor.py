@@ -59,7 +59,7 @@ def resolve_command_route(config: dict, subject: str):
 
 def route_label(route: dict) -> str:
     if route.get("mode") == "resume":
-        return f"指定会话: {route.get('target')}"
+        return f"指定任务: {route.get('target')}"
     return "新后台任务"
 
 
