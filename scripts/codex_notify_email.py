@@ -13,7 +13,10 @@ from pathlib import Path
 try:
     import tomllib
 except ModuleNotFoundError:
-    tomllib = None
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        tomllib = None
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"

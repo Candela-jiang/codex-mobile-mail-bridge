@@ -81,6 +81,7 @@ The reply email includes a work report and project evidence after the command ru
 ## Security Notes
 
 - Do not commit `config.json`, `gmail_app_password.dpapi`, logs, or PID files.
+- Do not commit `processed_message_ids.json`; it is only a local duplicate-check cache.
 - Prefer `CODEX_HOME` and environment-variable paths over machine-specific absolute paths when sharing setup notes across computers.
 - Keep `codex_sandbox` at `read-only` until you explicitly want email-triggered commands to edit files.
 - Only whitelist email addresses you control.

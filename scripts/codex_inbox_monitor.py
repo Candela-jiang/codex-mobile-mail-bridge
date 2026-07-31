@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import email
+import hashlib
 import imaplib
 import smtplib
 import subprocess
@@ -22,6 +24,9 @@ from codex_notify_email import (
     metadata_block,
     mobile_reply_hint,
 )
+
+PROCESSED_IDS_PATH = ROOT / "processed_message_ids.json"
+MAX_PROCESSED_IDS = 500
 
 
 def decode_value(value: str) -> str:
@@ -57,6 +62,40 @@ def strip_reply_prefixes(subject: str) -> str:
         return value
 
 
+def load_processed_message_ids() -> list[str]:
+    if not PROCESSED_IDS_PATH.exists():
+        return []
+    try:
+        data = json.loads(PROCESSED_IDS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if isinstance(data, dict):
+        items = data.get("items", [])
+    elif isinstance(data, list):
+        items = data
+    else:
+        items = []
+    return [str(item) for item in items if str(item).strip()]
+
+
+def save_processed_message_ids(items: list[str]) -> None:
+    payload = {"version": 1, "items": items[-MAX_PROCESSED_IDS:]}
+    PROCESSED_IDS_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def normalize_message_id(value: str) -> str:
+    return value.strip().strip("<>").lower()
+
+
+def build_message_identity(from_addr: str, subject: str, body: str, message_id: str) -> str:
+    if message_id:
+        return f"mid:{normalize_message_id(message_id)}"
+    digest = hashlib.sha256(
+        "\n".join([from_addr.strip().lower(), subject.strip(), body.strip()]).encode("utf-8", errors="ignore")
+    ).hexdigest()
+    return f"sha256:{digest}"
+
+
 def is_self_report(config: dict, from_addr: str, subject: str) -> bool:
     sender = str(config.get("sender", "")).lower()
     prefix = str(config.get("subject_prefix", "[Codex]")).lower()
@@ -89,6 +128,7 @@ def send_plain_email(config: dict, to_addr: str, subject: str, body: str) -> Non
 
 def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) -> str:
     out_path = Path(tempfile.gettempdir()) / f"codex-email-result-{int(time.time())}.txt"
+    safe_cwd = safe_existing_cwd(config.get("codex_cwd", str(ROOT)), config)
     prompt = "\n".join(
         [
             "You are Codex running from a Gmail command bridge.",
@@ -108,7 +148,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) 
         config.get("codex_exe", "codex"),
         "exec",
         "--cd",
-        config.get("codex_cwd", str(ROOT)),
+        safe_cwd,
         "--sandbox",
         config.get("codex_sandbox", "read-only"),
         "--skip-git-repo-check",
@@ -143,6 +183,8 @@ def process_once(config: dict) -> int:
 
     allowed = {item.lower() for item in config.get("allowed_senders", [])}
     tag = (config.get("inbox_subject_tag") or "[codex-next]").lower()
+    processed_ids = load_processed_message_ids()
+    processed_set = set(processed_ids)
     processed = 0
 
     with imaplib.IMAP4_SSL(config.get("imap_host", "imap.gmail.com"), int(config.get("imap_port", 993))) as imap:
@@ -160,12 +202,18 @@ def process_once(config: dict) -> int:
             message = email.message_from_bytes(raw)
             from_addr = parseaddr(decode_value(message.get("From", "")))[1].lower()
             subject = decode_value(message.get("Subject", ""))
+            body = get_text_body(message)
+            message_identity = build_message_identity(from_addr, subject, body, message.get("Message-ID", ""))
             if is_self_report(config, from_addr, subject):
                 log(f"inbox skipped self report: {subject}")
+                imap.store(msg_id, "+FLAGS", "\\Seen")
+                continue
+            if message_identity in processed_set:
+                log(f"inbox skipped duplicate: {subject}")
+                imap.store(msg_id, "+FLAGS", "\\Seen")
                 continue
             if from_addr not in allowed or tag not in subject.lower():
                 continue
-            body = get_text_body(message)
             log(f"inbox command accepted from {from_addr}: {subject}")
             try:
                 final = run_codex_from_email(config, from_addr, subject, body)
@@ -194,6 +242,9 @@ def process_once(config: dict) -> int:
                 ]
             )
             send_plain_email(config, from_addr, f"Re: {subject}", reply_body)
+            processed_set.add(message_identity)
+            processed_ids.append(message_identity)
+            save_processed_message_ids(processed_ids)
             imap.store(msg_id, "+FLAGS", "\\Seen")
             processed += 1
     return processed
