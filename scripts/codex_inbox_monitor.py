@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import traceback
+from datetime import datetime
 from email.header import decode_header
 from email.message import EmailMessage
 from email.message import Message
@@ -23,6 +24,7 @@ from codex_notify_email import (
     log,
     metadata_block,
     mobile_reply_hint,
+    safe_existing_cwd,
 )
 
 PROCESSED_IDS_PATH = ROOT / "processed_message_ids.json"
@@ -160,6 +162,8 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) 
         cmd,
         input=prompt,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         timeout=int(config.get("codex_timeout_seconds", 1800)),
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -224,23 +228,27 @@ def process_once(config: dict) -> int:
                 "input-messages": [body],
                 "task-name": subject,
             }
-            reply_body = "\n".join(
+            evidence = git_status_report(config.get("codex_cwd", ""), config)
+            reply_parts = [
+                "Codex 邮箱指令回执",
+                "",
+                f"时间: {datetime.now().strftime('%m-%d %H:%M')}",
+                metadata_block(meta_notification, config, subject),
+                f"来源: {from_addr}",
+            ]
+            if evidence:
+                reply_parts.extend(["", "电脑端:", evidence])
+            reply_parts.extend(
                 [
-                    metadata_block(meta_notification, config, subject),
-                    f"邮件触发来源: {from_addr}",
-                    f"执行目录: {config.get('codex_cwd', '')}",
-                    f"执行沙箱: {config.get('codex_sandbox', 'read-only')}",
                     "",
-                    "邮箱指令执行后的电脑端证据:",
-                    git_status_report(config.get("codex_cwd", ""), config),
-                    "",
-                    "Codex 回复:",
+                    "结果:",
                     final,
                     "",
-                    "手机下一步指令:",
+                    "下一步:",
                     mobile_reply_hint(config),
                 ]
             )
+            reply_body = "\n".join(reply_parts)
             send_plain_email(config, from_addr, f"Re: {subject}", reply_body)
             processed_set.add(message_identity)
             processed_ids.append(message_identity)
