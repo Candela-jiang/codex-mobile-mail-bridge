@@ -8,6 +8,7 @@ import imaplib
 import os
 import re
 import select
+import shutil
 import smtplib
 import subprocess
 import tempfile
@@ -330,9 +331,41 @@ def send_plain_email(config: dict, to_addr: str, subject: str, body: str, in_rep
     log(f"reply sent to {to_addr}")
 
 
+def resolve_codex_exe(config: dict) -> str:
+    configured = str(config.get("codex_exe") or "").strip()
+    if configured and Path(configured).exists():
+        return configured
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        bin_root = Path(local_app_data) / "OpenAI" / "Codex" / "bin"
+        try:
+            candidates = sorted(
+                bin_root.glob("*/codex.exe"),
+                key=lambda item: item.stat().st_mtime,
+                reverse=True,
+            )
+        except Exception:
+            candidates = []
+        if candidates:
+            found = str(candidates[0])
+            if configured:
+                log(f"codex_exe fallback: configured path missing; using {found}")
+            return found
+
+    for name in ("codex.exe", "codex.cmd"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return ""
+
+
 def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, route: dict) -> str:
     out_path = Path(tempfile.gettempdir()) / f"codex-email-result-{int(time.time())}.txt"
     safe_cwd = safe_existing_cwd(config.get("codex_cwd", str(ROOT)), config)
+    codex_exe = resolve_codex_exe(config)
+    if not codex_exe:
+        return "Codex 启动失败：没有找到可用的 codex.exe。请在电脑端更新邮件桥的 codex_exe 配置。"
     prompt = "\n".join(
         [
             "You are Codex running from a Gmail command bridge.",
@@ -351,7 +384,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
     )
     if route.get("mode") == "resume":
         cmd = [
-            config.get("codex_exe", "codex"),
+            codex_exe,
             "exec",
             "resume",
             "--all",
@@ -363,7 +396,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
         ]
     else:
         cmd = [
-            config.get("codex_exe", "codex"),
+            codex_exe,
             "exec",
             "--cd",
             safe_cwd,
@@ -465,12 +498,20 @@ def process_once(config: dict) -> int:
                         ]
                     )
                 except Exception:
-                    final = "Codex App 邮件命令入队失败:\n\n" + traceback.format_exc()
+                    log("app queue command failed:\n" + traceback.format_exc())
+                    final = "Codex App 投递失败：命令没有成功进入目标任务。详细错误已写入电脑端日志。"
             else:
                 try:
                     final = run_codex_from_email(config, from_addr, subject, body, route)
+                except FileNotFoundError:
+                    log("codex executable missing:\n" + traceback.format_exc())
+                    final = "Codex 启动失败：找不到 codex.exe。请在电脑端更新邮件桥配置后重试。"
+                except subprocess.TimeoutExpired:
+                    log("codex email command timed out:\n" + traceback.format_exc())
+                    final = "Codex 执行超时：这条邮件命令跑得太久，已停止等待。可以把任务拆小后再回复。"
                 except Exception:
-                    final = "Codex email command crashed:\n\n" + traceback.format_exc()
+                    log("codex email command crashed:\n" + traceback.format_exc())
+                    final = "Codex 执行失败：电脑端遇到错误，详细信息已写入本地日志。"
             meta_notification = {
                 "cwd": route.get("cwd") or config.get("codex_cwd", ""),
                 "input-messages": [body],
