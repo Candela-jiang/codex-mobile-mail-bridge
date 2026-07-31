@@ -312,13 +312,11 @@ def resolve_task_name(notification: dict, config=None) -> str:
             if not looks_like_instruction_or_path(task):
                 return task
 
-    latest_title = session_index_title()
-    if latest_title:
-        return latest_title
-
     user_messages = notification.get("input-messages") or []
     if user_messages:
-        return clean_subject(first_non_empty_line(str(user_messages[0])))
+        instruction = sanitize_user_instruction(first_non_empty_line(str(user_messages[0])), 90)
+        if instruction and not looks_like_instruction_or_path(instruction):
+            return clean_subject(instruction)
     return clean_subject(notification.get("thread-id", "Codex task"))
 
 
@@ -571,7 +569,7 @@ def send_email(notification: dict, config: dict) -> None:
         smtp.starttls()
         smtp.login(sender, password)
         smtp.send_message(message)
-    log(f"mail sent to {', '.join(recipients)}")
+    log(f"mail sent to {', '.join(recipients)}; subject={subject}")
 
 
 def main() -> int:
