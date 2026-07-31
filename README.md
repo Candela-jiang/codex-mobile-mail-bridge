@@ -22,10 +22,13 @@ Run from the plugin folder:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Install-CodexMobileMailBridge.ps1" `
   -Sender "your-address@gmail.com" `
-  -Recipients "your-address@gmail.com","backup@example.com" `
-  -AllowedSenders "your-address@gmail.com" `
+  -Recipients "your-phone-inbox@example.com" `
+  -AllowedSenders "your-phone-inbox@example.com" `
   -CodexCwd "C:\path\to\your\project"
 ```
+
+Keep real email addresses in your local runtime `config.json` or installer
+arguments, not in committed files.
 
 The installer writes runtime files to:
 

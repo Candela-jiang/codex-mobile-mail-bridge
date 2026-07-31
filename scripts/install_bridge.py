@@ -16,6 +16,9 @@ except ModuleNotFoundError:
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_SENDER = "your-address@gmail.com"
+DEFAULT_RECIPIENT = "your-address@gmail.com"
+DEFAULT_ALLOWED_SENDER = "your-address@gmail.com"
 RUNTIME_FILES = [
     "codex_notify_email.py",
     "codex_inbox_monitor.py",
@@ -116,8 +119,8 @@ def update_codex_config(config_path: Path, python_exe: str, notify_script: Path)
 
 
 def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
-    recipients = args.recipient or [args.sender]
-    allowed = args.allowed_sender or [args.sender]
+    recipients = args.recipient or [DEFAULT_RECIPIENT]
+    allowed = args.allowed_sender or [DEFAULT_ALLOWED_SENDER]
     return {
         "enabled": False,
         "sender": args.sender,
@@ -149,7 +152,7 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Install Codex Mobile Mail Bridge runtime files.")
     default_codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex")).expanduser()
-    parser.add_argument("--sender", required=True, help="Gmail address used for SMTP and IMAP.")
+    parser.add_argument("--sender", default=DEFAULT_SENDER, help="Gmail address used for SMTP and IMAP.")
     parser.add_argument("--recipient", action="append", help="Email recipient for Codex work reports. Repeatable.")
     parser.add_argument("--allowed-sender", action="append", help="Email address allowed to send [codex-next] commands. Repeatable.")
     parser.add_argument("--codex-home", default=str(default_codex_home), help="Codex home directory.")
