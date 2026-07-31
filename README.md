@@ -113,9 +113,11 @@ project, task, and Git details remain in the email body. Adjust
 `max_subject_task_chars` in runtime `config.json` (default 36) if you want a longer or
 shorter task label.
 
-The report body keeps `指令` short by showing the user's latest actual command.
-It filters internal skill links, image tags, and local file paths. `结果` uses
-the final Codex output for that turn.
+The report body keeps `指令` short by showing the last real user command from
+the current Codex notification. It filters internal skill links, image tags,
+and local file paths. If no real command is present, it says so instead of
+guessing from history. `结果` uses the final Codex output from the same
+notification and does not guess from other sessions by default.
 
 ## Security Notes
 

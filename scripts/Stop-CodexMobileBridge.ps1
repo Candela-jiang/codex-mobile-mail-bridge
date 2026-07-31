@@ -13,11 +13,25 @@ if (Test-Path -LiteralPath $pidPath) {
   if ($oldPid -match '^\d+$') {
     $process = Get-Process -Id ([int]$oldPid) -ErrorAction SilentlyContinue
     if ($process) {
-      Stop-Process -Id $process.Id -Force
+      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
       Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] mobile bridge monitor stopped: pid=$($process.Id)"
     }
   }
   Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+}
+
+$escapedRoot = [regex]::Escape($PSScriptRoot)
+$orphanMonitors = Get-CimInstance Win32_Process | Where-Object {
+  $_.CommandLine -and
+  $_.CommandLine -match "codex_inbox_monitor\.py" -and
+  $_.CommandLine -match $escapedRoot
+}
+foreach ($monitor in $orphanMonitors) {
+  $process = Get-Process -Id ([int]$monitor.ProcessId) -ErrorAction SilentlyContinue
+  if ($process) {
+    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] orphan inbox monitor stopped: pid=$($process.Id)"
+  }
 }
 
 Write-Host "Codex mobile bridge: OFF"

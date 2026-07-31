@@ -60,9 +60,9 @@ The email report should be written in Chinese by default and help a phone-only u
 - project label and working directory.
 - task name from the Codex notification or user input fallback.
 - report subject from the Codex task name, omitting local paths and long prompts.
-- user instruction from the latest real user command, filtering skill links, image tags, and local paths.
+- user instruction from the last real user command in the current Codex notification, filtering skill links, image tags, and local paths.
 - Git root, branch, changed files, and diff stat when the project is a Git repository.
-- final Codex reply.
+- final Codex reply from the current notification, without guessing from other sessions by default.
 - the route used for inbox command replies, such as new background task or specified session.
 - the instruction rule for replying from mobile, including the targeted subject format when enabled.
 

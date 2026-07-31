@@ -301,11 +301,6 @@ def resolve_task_name(notification: dict, config=None) -> str:
             if title:
                 return title
 
-    if config and config.get("default_target_session"):
-        title = session_index_title(str(config.get("default_target_session")))
-        if title:
-            return title
-
     for key in ("task-name", "task_name"):
         if notification.get(key):
             task = clean_subject(str(notification[key]))
@@ -400,7 +395,7 @@ def user_instruction_summary(messages: list, limit: int = 600) -> str:
         "generate 0 to 3 hyperpersonalized suggestions",
         "get an understanding of the user's intent",
     )
-    for message in messages:
+    for message in reversed(messages):
         text = sanitize_user_instruction(str(message), limit)
         if not text:
             continue
@@ -418,11 +413,14 @@ def resolve_user_instruction(notification: dict, config: dict, task_name: str) -
     if summary != "（空）":
         return summary
 
+    if not config.get("allow_session_history_instruction_fallback", False):
+        return "（未从本次 Codex 通知中取得真实用户指令）"
+
     thread_id = notification_thread_id(notification, task_name)
     last_user, _last_assistant = session_last_user_and_assistant(thread_id)
     if last_user:
         return truncate_text(last_user, 600)
-    return "（空）"
+    return "（未从本次 Codex 通知中取得真实用户指令）"
 
 
 def resolve_assistant_result(notification: dict, config: dict, task_name: str) -> str:
@@ -430,9 +428,12 @@ def resolve_assistant_result(notification: dict, config: dict, task_name: str) -
     if assistant_message:
         return assistant_message
 
+    if not config.get("allow_session_history_result_fallback", False):
+        return "（未从本次 Codex 通知中取得结果）"
+
     thread_id = notification_thread_id(notification, task_name)
     _last_user, last_assistant = session_last_user_and_assistant(thread_id)
-    return last_assistant.strip()
+    return last_assistant.strip() or "（未从本次 Codex 通知中取得结果）"
 
 
 def safe_existing_cwd(cwd: str, config: dict) -> str:
