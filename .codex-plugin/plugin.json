@@ -1,6 +1,6 @@
 {
   "name": "codex-mobile-mail-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Email-based mobile supervision and follow-up command loop for local Codex work.",
   "author": {
     "name": "Candela-jiang"

@@ -7,6 +7,7 @@ It can:
 
 - send Chinese email work reports when a Codex turn completes;
 - include model, task name, project path, Git branch, changed files, and diff stat;
+- keep report email subjects compact, with full project metadata in the body;
 - poll a Gmail inbox for whitelisted messages whose subject contains `[codex-next]`;
 - run those email instructions through local `codex exec` in a conservative sandbox;
 - resume a specific existing Codex session when the subject uses `[codex-next:session-id-or-task-name]`;
@@ -98,6 +99,19 @@ subjects use `codex exec resume --all <target> -`, so the command is attached
 to the chosen Codex session.
 
 The reply email includes a work report and project evidence after the command runs.
+
+## Report Subjects
+
+Outgoing Codex work reports use the Codex task name as the subject, such as:
+
+```text
+codex-moblie-mail-bridge
+```
+
+Long prompts and local paths are kept out of the subject. The full model,
+project, task, and Git details remain in the email body. Adjust
+`max_subject_task_chars` in runtime `config.json` (default 36) if you want a longer or
+shorter task label.
 
 ## Security Notes
 

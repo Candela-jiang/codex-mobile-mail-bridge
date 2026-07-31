@@ -132,6 +132,8 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "password_env": "CODEX_GMAIL_APP_PASSWORD",
         "dpapi_secret_file": "gmail_app_password.dpapi",
         "subject_prefix": "[Codex]",
+        "max_subject_task_chars": 36,
+        "self_report_subject_is_task_name": True,
         "inbox_enabled": False,
         "inbox_subject_tag": args.subject_tag,
         "allowed_senders": allowed,

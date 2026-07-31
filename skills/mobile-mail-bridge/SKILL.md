@@ -43,6 +43,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Install-CodexMobi
 ## Operation
 
 - Outbound reports are triggered through Codex `notify` on `agent-turn-complete`.
+- Outbound report subjects should be the Codex task name, for example `codex-moblie-mail-bridge`; keep model, project path, and Git evidence in the body.
 - The installer backs up `config.toml`, installs the bridge as the new `notify`, and stores any previous `notify` command as `original_notify`.
 - On reinstall, the installer must avoid chaining the bridge to itself; it preserves the prior `original_notify` when the current `notify` already points at `codex_notify_email.py`.
 - The installer records the setup-time Python executable as `python_exe` so background scripts do not depend on a different machine `PATH`.
@@ -58,6 +59,7 @@ The email report should be written in Chinese by default and help a phone-only u
 - AI model and provider from Codex config when available.
 - project label and working directory.
 - task name from the Codex notification or user input fallback.
+- report subject from the Codex task name, omitting local paths and long prompts.
 - Git root, branch, changed files, and diff stat when the project is a Git repository.
 - final Codex reply.
 - the route used for inbox command replies, such as new background task or specified session.

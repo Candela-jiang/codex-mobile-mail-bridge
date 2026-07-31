@@ -12,7 +12,7 @@ $script = Join-Path $PSScriptRoot "codex_notify_email.py"
 $configPath = Join-Path $PSScriptRoot "config.json"
 $pythonCommand = @("python")
 if (Test-Path -LiteralPath $configPath) {
-  $config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+  $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
   if ($config.PSObject.Properties.Name -contains "python_exe" -and -not [string]::IsNullOrWhiteSpace($config.python_exe)) {
     if ((Test-Path -LiteralPath $config.python_exe) -or (Get-Command $config.python_exe -ErrorAction SilentlyContinue)) {
       $pythonCommand = @($config.python_exe)

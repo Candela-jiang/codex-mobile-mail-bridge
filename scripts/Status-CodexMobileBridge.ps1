@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $configPath = Join-Path $PSScriptRoot "config.json"
 $pidPath = Join-Path $PSScriptRoot "inbox-monitor.pid"
 $secretPath = Join-Path $PSScriptRoot "gmail_app_password.dpapi"
-$config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+$config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
 
 $monitorPid = ""
 $running = $false

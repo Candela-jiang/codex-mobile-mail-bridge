@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import smtplib
 import subprocess
 import sys
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 CODEX_CONFIG_PATH = Path(os.environ.get("CODEX_CONFIG_PATH", Path.home() / ".codex" / "config.toml"))
+SESSION_INDEX_PATH = Path(os.environ.get("CODEX_SESSION_INDEX_PATH", Path.home() / ".codex" / "session_index.jsonl"))
 LOG_PATH = ROOT / "mail-bridge.log"
 
 
@@ -126,6 +128,66 @@ def clean_subject(value: str) -> str:
     return value or "Codex task"
 
 
+def strip_subject_noise(value: str) -> str:
+    text = " ".join(str(value or "").split())
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\([A-Za-z]:[\\/].*?\)", "", text)
+    text = re.sub(r"[A-Za-z]:[\\/][^\s\])>]+", "", text)
+    return text.strip(" -_[]()\\/")
+
+
+def looks_like_instruction_or_path(value: str) -> bool:
+    text = str(value or "")
+    lowered = text.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "c:\\",
+            "d:\\",
+            ".codex\\skills",
+            ".codex/skills",
+            "you are codex",
+            "邮件正文",
+        )
+    ) or len(text) > 80
+
+
+def session_index_title(thread_id: str = "") -> str:
+    if not SESSION_INDEX_PATH.exists():
+        return ""
+    latest = ""
+    try:
+        for line in SESSION_INDEX_PATH.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+            title = clean_subject(str(item.get("thread_name") or ""))
+            if not title:
+                continue
+            if thread_id and str(item.get("id") or "") == thread_id:
+                latest = title
+            elif not thread_id:
+                latest = title
+    except Exception:
+        return ""
+    return latest
+
+
+def compact_subject_task(value: str, limit: int) -> str:
+    text = strip_subject_noise(value)
+    if not text:
+        return "工作报告"
+    if len(text) <= limit:
+        return text
+    return text[: max(1, limit - 3)].rstrip() + "..."
+
+
+def build_report_subject(notification: dict, config: dict) -> str:
+    limit = int(config.get("max_subject_task_chars") or 36)
+    return compact_subject_task(resolve_task_name(notification, config), limit)
+
+
 def resolve_model_label(notification: dict, codex_config: dict) -> str:
     for key in ("model", "model-id", "ai-model"):
         if notification.get(key):
@@ -137,10 +199,32 @@ def resolve_model_label(notification: dict, codex_config: dict) -> str:
     return str(model or provider or "未知")
 
 
-def resolve_task_name(notification: dict) -> str:
-    for key in ("task-name", "task_name", "thread-name", "thread_name", "name", "title"):
+def resolve_task_name(notification: dict, config=None) -> str:
+    for key in ("thread-name", "thread_name", "title", "name"):
         if notification.get(key):
             return clean_subject(str(notification[key]))
+
+    for key in ("thread-id", "thread_id", "session-id", "session_id", "id"):
+        if notification.get(key):
+            title = session_index_title(str(notification[key]))
+            if title:
+                return title
+
+    if config and config.get("default_target_session"):
+        title = session_index_title(str(config.get("default_target_session")))
+        if title:
+            return title
+
+    for key in ("task-name", "task_name"):
+        if notification.get(key):
+            task = clean_subject(str(notification[key]))
+            if not looks_like_instruction_or_path(task):
+                return task
+
+    latest_title = session_index_title()
+    if latest_title:
+        return latest_title
+
     user_messages = notification.get("input-messages") or []
     if user_messages:
         return clean_subject(first_non_empty_line(str(user_messages[0])))
@@ -310,7 +394,7 @@ def mobile_reply_hint(config: dict) -> str:
 def build_body(notification: dict, config: dict) -> str:
     user_messages = notification.get("input-messages") or []
     assistant_message = notification.get("last-assistant-message") or ""
-    task_name = resolve_task_name(notification)
+    task_name = resolve_task_name(notification, config)
     cwd = notification.get("cwd", "")
     evidence = git_status_report(cwd, config)
     body_parts = [
@@ -349,7 +433,7 @@ def send_email(notification: dict, config: dict) -> None:
 
     sender = config["sender"]
     recipients = config["recipients"]
-    subject = f"{config.get('subject_prefix', '[Codex]')} {resolve_task_name(notification)}"
+    subject = build_report_subject(notification, config)
 
     message = EmailMessage()
     message["From"] = sender

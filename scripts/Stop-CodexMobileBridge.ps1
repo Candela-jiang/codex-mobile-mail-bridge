@@ -3,7 +3,7 @@ $configPath = Join-Path $PSScriptRoot "config.json"
 $pidPath = Join-Path $PSScriptRoot "inbox-monitor.pid"
 $logPath = Join-Path $PSScriptRoot "mail-bridge.log"
 
-$config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+$config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
 $config.enabled = $false
 $config.inbox_enabled = $false
 $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding UTF8

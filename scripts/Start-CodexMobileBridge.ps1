@@ -4,7 +4,7 @@ $pidPath = Join-Path $PSScriptRoot "inbox-monitor.pid"
 $logPath = Join-Path $PSScriptRoot "mail-bridge.log"
 $monitorPath = Join-Path $PSScriptRoot "codex_inbox_monitor.py"
 
-$config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+$config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
 
 function Resolve-PythonCommand {
   param([string]$Configured)

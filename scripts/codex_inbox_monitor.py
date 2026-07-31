@@ -132,7 +132,11 @@ def is_self_report(config: dict, from_addr: str, subject: str) -> bool:
     sender = str(config.get("sender", "")).lower()
     prefix = str(config.get("subject_prefix", "[Codex]")).lower()
     core_subject = strip_reply_prefixes(subject).lower()
-    return bool(sender and from_addr == sender and prefix and core_subject.startswith(prefix))
+    if not sender or from_addr != sender:
+        return False
+    if resolve_command_route(config, core_subject):
+        return False
+    return bool(prefix and core_subject.startswith(prefix)) or bool(config.get("self_report_subject_is_task_name", True))
 
 
 def send_plain_email(config: dict, to_addr: str, subject: str, body: str) -> None:
