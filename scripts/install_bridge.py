@@ -141,9 +141,11 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "codex_exe": args.codex_exe,
         "codex_sandbox": args.codex_sandbox,
         "codex_timeout_seconds": args.codex_timeout_seconds,
+        "command_mode": args.command_mode,
+        "default_target_session": args.default_target_session,
         "include_git_summary": True,
         "max_git_files": 30,
-        "mobile_reply_hint": "用手机回邮件时，请让主题包含 [codex-next]，正文写项目的下一步指令。",
+        "mobile_reply_hint": "用手机回邮件时，主题写 [codex-next] 可开新后台任务；写 [codex-next:会话ID或任务名] 可指定已有 Codex 会话。",
         "max_body_chars": 15000,
         "original_notify": original_notify,
     }
@@ -161,6 +163,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--codex-exe", default=shutil.which("codex") or "codex", help="Path to codex executable.")
     parser.add_argument("--codex-sandbox", default="read-only", choices=["read-only", "workspace-write", "danger-full-access"])
     parser.add_argument("--codex-timeout-seconds", type=int, default=1800)
+    parser.add_argument("--command-mode", default="exec", choices=["exec", "resume"], help="Default inbox route when the subject has no explicit target.")
+    parser.add_argument("--default-target-session", default="", help="Session id or thread name used when --command-mode resume is selected.")
     parser.add_argument("--poll-seconds", type=int, default=60)
     parser.add_argument("--subject-tag", default="[codex-next]")
     parser.add_argument("--smtp-host", default="smtp.gmail.com")

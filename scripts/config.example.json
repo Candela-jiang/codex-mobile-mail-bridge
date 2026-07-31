@@ -20,9 +20,11 @@
   "codex_exe": "codex",
   "codex_sandbox": "read-only",
   "codex_timeout_seconds": 1800,
+  "command_mode": "exec",
+  "default_target_session": "",
   "include_git_summary": true,
   "max_git_files": 30,
-  "mobile_reply_hint": "用手机回邮件时，请让主题包含 [codex-next]，正文写项目的下一步指令。",
+  "mobile_reply_hint": "用手机回邮件时，主题写 [codex-next] 可开新后台任务；写 [codex-next:会话ID或任务名] 可指定已有 Codex 会话。",
   "max_body_chars": 15000,
   "original_notify": []
 }

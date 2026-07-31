@@ -46,8 +46,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Install-CodexMobi
 - The installer backs up `config.toml`, installs the bridge as the new `notify`, and stores any previous `notify` command as `original_notify`.
 - On reinstall, the installer must avoid chaining the bridge to itself; it preserves the prior `original_notify` when the current `notify` already points at `codex_notify_email.py`.
 - The installer records the setup-time Python executable as `python_exe` so background scripts do not depend on a different machine `PATH`.
-- Inbox commands are accepted only from configured `allowed_senders` and only when the subject contains `[codex-next]`.
-- Email-triggered commands run through `codex exec` in the configured `codex_sandbox`.
+- Inbox commands are accepted only from configured `allowed_senders` and only when the subject contains `[codex-next]` or `[codex-next:target]`.
+- Plain `[codex-next]` starts a new `codex exec` command in the configured `codex_sandbox`.
+- `[codex-next:session-id-or-task-name]` uses `codex exec resume --all <target> -` so the phone command is attached to a specific existing Codex session.
+- Runtime config can set `command_mode` to `resume` plus `default_target_session` when the user wants plain `[codex-next]` to continue one chosen session by default.
 
 ## Report Contents
 
@@ -58,13 +60,15 @@ The email report should be written in Chinese by default and help a phone-only u
 - task name from the Codex notification or user input fallback.
 - Git root, branch, changed files, and diff stat when the project is a Git repository.
 - final Codex reply.
-- the instruction rule for replying from mobile.
+- the route used for inbox command replies, such as new background task or specified session.
+- the instruction rule for replying from mobile, including the targeted subject format when enabled.
 
 ## Safety
 
 Treat this bridge as a local remote-control surface.
 
 - Keep `codex_sandbox` as `read-only` by default.
+- Warn users not to target a session that is already actively running; wait for its report first.
 - Never publish `config.json`, `gmail_app_password.dpapi`, logs, PID files, personal email addresses, or machine-specific paths.
 - Do not add broad allowed senders.
 - Warn the user that project details are sent over email.

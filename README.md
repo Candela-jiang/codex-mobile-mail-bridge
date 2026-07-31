@@ -9,6 +9,7 @@ It can:
 - include model, task name, project path, Git branch, changed files, and diff stat;
 - poll a Gmail inbox for whitelisted messages whose subject contains `[codex-next]`;
 - run those email instructions through local `codex exec` in a conservative sandbox;
+- resume a specific existing Codex session when the subject uses `[codex-next:session-id-or-task-name]`;
 - email the result back so the user can continue guiding a desktop project from a phone.
 
 This is intended for local, user-owned machines. It is not an official OpenAI email interface.
@@ -80,6 +81,22 @@ Send an email to the configured Gmail inbox from an allowed sender.
 - Body is the next project instruction.
 - The default sandbox is `read-only`.
 
+To target an existing Codex conversation, put the target after a colon:
+
+```text
+[codex-next:019fb407-95d7-7940-b687-b85ea0226ebe]
+```
+
+You can also use a task name when it is unique enough:
+
+```text
+[codex-next:codex-moblie-mail-bridge]
+```
+
+Plain `[codex-next]` starts a new background `codex exec` task. Targeted
+subjects use `codex exec resume --all <target> -`, so the command is attached
+to the chosen Codex session.
+
 The reply email includes a work report and project evidence after the command runs.
 
 ## Security Notes
@@ -88,5 +105,6 @@ The reply email includes a work report and project evidence after the command ru
 - Do not commit `processed_message_ids.json`; it is only a local duplicate-check cache.
 - Prefer `CODEX_HOME` and environment-variable paths over machine-specific absolute paths when sharing setup notes across computers.
 - Keep `codex_sandbox` at `read-only` until you explicitly want email-triggered commands to edit files.
+- Targeted resume commands continue the selected Codex session's context. Avoid sending a new email to a session that is already actively running.
 - Only whitelist email addresses you control.
 - This bridge can send local project details over email. Use it only for projects where that is acceptable.

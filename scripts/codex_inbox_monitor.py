@@ -4,6 +4,7 @@ import json
 import email
 import hashlib
 import imaplib
+import re
 import smtplib
 import subprocess
 import tempfile
@@ -29,6 +30,35 @@ from codex_notify_email import (
 
 PROCESSED_IDS_PATH = ROOT / "processed_message_ids.json"
 MAX_PROCESSED_IDS = 500
+
+
+def inbox_tag_name(config: dict) -> str:
+    tag = str(config.get("inbox_subject_tag") or "[codex-next]").strip()
+    if tag.startswith("[") and tag.endswith("]"):
+        tag = tag[1:-1]
+    return tag.split(":", 1)[0].strip() or "codex-next"
+
+
+def resolve_command_route(config: dict, subject: str):
+    tag_name = inbox_tag_name(config)
+    pattern = re.compile(r"\[" + re.escape(tag_name) + r"(?::([^\]]+))?\]", re.IGNORECASE)
+    match = pattern.search(subject or "")
+    if not match:
+        return None
+
+    explicit_target = (match.group(1) or "").strip()
+    default_mode = str(config.get("command_mode") or "exec").strip().lower()
+    default_target = str(config.get("default_target_session") or "").strip()
+    target = explicit_target or (default_target if default_mode == "resume" else "")
+    if target:
+        return {"mode": "resume", "target": target}
+    return {"mode": "exec", "target": ""}
+
+
+def route_label(route: dict) -> str:
+    if route.get("mode") == "resume":
+        return f"指定会话: {route.get('target')}"
+    return "新后台任务"
 
 
 def decode_value(value: str) -> str:
@@ -128,7 +158,7 @@ def send_plain_email(config: dict, to_addr: str, subject: str, body: str) -> Non
     log(f"reply sent to {to_addr}")
 
 
-def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) -> str:
+def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, route: dict) -> str:
     out_path = Path(tempfile.gettempdir()) / f"codex-email-result-{int(time.time())}.txt"
     safe_cwd = safe_existing_cwd(config.get("codex_cwd", str(ROOT)), config)
     prompt = "\n".join(
@@ -138,6 +168,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) 
             "这不是普通 AI 闲聊，而是用户在手机上继续指挥电脑端 Codex 工作。",
             "请始终用中文回复邮件内容。说明你检查了什么、实际做了什么或没有做什么、还剩什么、下一步需要用户怎么指示。",
             "保持保守边界：不要泄露密钥；不要执行破坏性操作；除非本地沙箱和任务都明确允许，否则不要修改文件。",
+            f"邮件路由: {route_label(route)}",
             "",
             f"From: {from_addr}",
             f"Subject: {subject}",
@@ -146,18 +177,31 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str) 
             body.strip(),
         ]
     )
-    cmd = [
-        config.get("codex_exe", "codex"),
-        "exec",
-        "--cd",
-        safe_cwd,
-        "--sandbox",
-        config.get("codex_sandbox", "read-only"),
-        "--skip-git-repo-check",
-        "--output-last-message",
-        str(out_path),
-        "-",
-    ]
+    if route.get("mode") == "resume":
+        cmd = [
+            config.get("codex_exe", "codex"),
+            "exec",
+            "resume",
+            "--all",
+            "--skip-git-repo-check",
+            "--output-last-message",
+            str(out_path),
+            str(route.get("target") or ""),
+            "-",
+        ]
+    else:
+        cmd = [
+            config.get("codex_exe", "codex"),
+            "exec",
+            "--cd",
+            safe_cwd,
+            "--sandbox",
+            config.get("codex_sandbox", "read-only"),
+            "--skip-git-repo-check",
+            "--output-last-message",
+            str(out_path),
+            "-",
+        ]
     result = subprocess.run(
         cmd,
         input=prompt,
@@ -186,7 +230,6 @@ def process_once(config: dict) -> int:
         return 0
 
     allowed = {item.lower() for item in config.get("allowed_senders", [])}
-    tag = (config.get("inbox_subject_tag") or "[codex-next]").lower()
     processed_ids = load_processed_message_ids()
     processed_set = set(processed_ids)
     processed = 0
@@ -216,11 +259,12 @@ def process_once(config: dict) -> int:
                 log(f"inbox skipped duplicate: {subject}")
                 imap.store(msg_id, "+FLAGS", "\\Seen")
                 continue
-            if from_addr not in allowed or tag not in subject.lower():
+            route = resolve_command_route(config, subject)
+            if from_addr not in allowed or not route:
                 continue
             log(f"inbox command accepted from {from_addr}: {subject}")
             try:
-                final = run_codex_from_email(config, from_addr, subject, body)
+                final = run_codex_from_email(config, from_addr, subject, body, route)
             except Exception:
                 final = "Codex email command crashed:\n\n" + traceback.format_exc()
             meta_notification = {
@@ -235,6 +279,7 @@ def process_once(config: dict) -> int:
                 f"时间: {datetime.now().strftime('%m-%d %H:%M')}",
                 metadata_block(meta_notification, config, subject),
                 f"来源: {from_addr}",
+                f"路由: {route_label(route)}",
             ]
             if evidence:
                 reply_parts.extend(["", "电脑端:", evidence])

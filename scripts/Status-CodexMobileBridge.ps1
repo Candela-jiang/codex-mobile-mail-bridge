@@ -22,6 +22,8 @@ if (Test-Path -LiteralPath $pidPath) {
   Recipients = ($config.recipients -join ", ")
   AllowedSenders = ($config.allowed_senders -join ", ")
   SubjectTag = $config.inbox_subject_tag
+  CommandMode = $config.command_mode
+  DefaultTargetSession = $config.default_target_session
   PythonExe = $config.python_exe
   CodexCwd = $config.codex_cwd
   Sandbox = $config.codex_sandbox

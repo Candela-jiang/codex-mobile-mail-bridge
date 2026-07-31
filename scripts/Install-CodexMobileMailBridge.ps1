@@ -10,6 +10,9 @@ param(
   [string]$CodexExe = "codex",
   [ValidateSet("read-only", "workspace-write", "danger-full-access")]
   [string]$CodexSandbox = "read-only",
+  [ValidateSet("exec", "resume")]
+  [string]$CommandMode = "exec",
+  [string]$DefaultTargetSession = "",
   [int]$PollSeconds = 60,
   [switch]$SkipConfigUpdate
 )
@@ -23,9 +26,13 @@ $installerArgs = @(
   "--codex-cwd", $CodexCwd,
   "--codex-exe", $CodexExe,
   "--codex-sandbox", $CodexSandbox,
+  "--command-mode", $CommandMode,
   "--poll-seconds", "$PollSeconds"
 )
 
+if ($DefaultTargetSession) {
+  $installerArgs += @("--default-target-session", $DefaultTargetSession)
+}
 if ($RuntimeDir) {
   $installerArgs += @("--runtime-dir", $RuntimeDir)
 }
