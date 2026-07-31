@@ -14,7 +14,7 @@
   "max_subject_task_chars": 36,
   "self_report_subject_is_task_name": true,
   "inbox_enabled": false,
-  "send_received_ack": true,
+  "send_received_ack": false,
   "inbox_subject_tag": "[codex-next]",
   "allowed_senders": ["your-address@gmail.com"],
   "poll_seconds": 60,

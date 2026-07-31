@@ -321,7 +321,7 @@ def send_plain_email(config: dict, to_addr: str, subject: str, body: str, in_rep
         if normalized:
             message["In-Reply-To"] = f"<{normalized}>"
             message["References"] = f"<{normalized}>"
-    message.set_content(body)
+    message.set_content(body, charset="utf-8", cte="base64")
 
     with smtplib.SMTP(config.get("smtp_host", "smtp.gmail.com"), int(config.get("smtp_port", 587)), timeout=30) as smtp:
         smtp.starttls()

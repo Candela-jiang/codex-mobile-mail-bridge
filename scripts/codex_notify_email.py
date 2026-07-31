@@ -706,7 +706,7 @@ def send_email(notification: dict, config: dict) -> None:
     if thread_id:
         message["X-Codex-Thread-ID"] = thread_id
     message["X-Codex-Task-Name"] = task_name
-    message.set_content(build_body(notification, config))
+    message.set_content(build_body(notification, config), charset="utf-8", cte="base64")
 
     with smtplib.SMTP(config.get("smtp_host", "smtp.gmail.com"), int(config.get("smtp_port", 587)), timeout=30) as smtp:
         smtp.starttls()
