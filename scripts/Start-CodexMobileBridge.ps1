@@ -5,6 +5,16 @@ $logPath = Join-Path $PSScriptRoot "mail-bridge.log"
 $monitorPath = Join-Path $PSScriptRoot "codex_inbox_monitor.py"
 
 $config = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+
+function Resolve-PythonCommand {
+  param([string]$Configured)
+  if (-not [string]::IsNullOrWhiteSpace($Configured)) {
+    if (Test-Path -LiteralPath $Configured) { return @($Configured) }
+    if (Get-Command $Configured -ErrorAction SilentlyContinue) { return @($Configured) }
+  }
+  if (Get-Command py -ErrorAction SilentlyContinue) { return @("py", "-3") }
+  return @("python")
+}
 $config.enabled = $true
 $config.inbox_enabled = $true
 $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding UTF8
@@ -18,8 +28,12 @@ if (Test-Path -LiteralPath $pidPath) {
 }
 
 if (-not $existing) {
-  $args = "-NoProfile -ExecutionPolicy Bypass -Command `"python '$monitorPath'`""
-  $process = Start-Process -FilePath "powershell" -ArgumentList $args -WindowStyle Hidden -PassThru
+  $pythonCommand = Resolve-PythonCommand -Configured ($(if ($config.PSObject.Properties.Name -contains "python_exe") { $config.python_exe } else { $null }))
+  $pythonArgs = @()
+  if ($pythonCommand.Count -gt 1) {
+    $pythonArgs = $pythonCommand[1..($pythonCommand.Count - 1)]
+  }
+  $process = Start-Process -FilePath $pythonCommand[0] -ArgumentList @($pythonArgs + @($monitorPath)) -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru
   $process.Id | Set-Content -LiteralPath $pidPath -Encoding ASCII
   Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] mobile bridge monitor started: pid=$($process.Id)"
   Write-Host "Codex mobile bridge: ON"

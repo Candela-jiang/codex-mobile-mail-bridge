@@ -20,7 +20,7 @@ The plugin root contains `scripts/`. Resolve script paths relative to the plugin
 - `scripts/Status-CodexMobileBridge.ps1`
 - `scripts/Test-CodexMailBridge.ps1`
 
-After install, runtime files live under `%USERPROFILE%\.codex\mobile-mail-bridge` unless the installer receives `-RuntimeDir`.
+After install, runtime files live under `$env:CODEX_HOME\mobile-mail-bridge` when `CODEX_HOME` is set, otherwise `%USERPROFILE%\.codex\mobile-mail-bridge`, unless the installer receives `-RuntimeDir`.
 
 ## Install Workflow
 
@@ -28,7 +28,7 @@ After install, runtime files live under `%USERPROFILE%\.codex\mobile-mail-bridge
 2. Run the installer from the plugin root. Keep the default sandbox `read-only` unless the user explicitly asks to allow email-triggered edits.
 3. Tell the user to generate a Gmail App Password, then run `Set-GmailAppPassword.ps1` from the runtime directory.
 4. Start the bridge with `Start-CodexMobileBridge.ps1`.
-5. Check `Status-CodexMobileBridge.ps1`; confirm `OutboundReports`, `InboxCommands`, and `MonitorRunning` are true, and `GmailSecretSaved` is true.
+5. Check `Status-CodexMobileBridge.ps1`; confirm `OutboundReports`, `InboxCommands`, and `MonitorRunning` are true, `GmailSecretSaved` is true, and `PythonExe` points to a usable Python runtime.
 
 Example:
 
@@ -44,6 +44,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Install-CodexMobi
 
 - Outbound reports are triggered through Codex `notify` on `agent-turn-complete`.
 - The installer backs up `config.toml`, installs the bridge as the new `notify`, and stores any previous `notify` command as `original_notify`.
+- On reinstall, the installer must avoid chaining the bridge to itself; it preserves the prior `original_notify` when the current `notify` already points at `codex_notify_email.py`.
+- The installer records the setup-time Python executable as `python_exe` so background scripts do not depend on a different machine `PATH`.
 - Inbox commands are accepted only from configured `allowed_senders` and only when the subject contains `[codex-next]`.
 - Email-triggered commands run through `codex exec` in the configured `codex_sandbox`.
 

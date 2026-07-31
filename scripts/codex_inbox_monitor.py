@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import email
 import imaplib
 import smtplib
@@ -140,7 +142,7 @@ def process_once(config: dict) -> int:
         return 0
 
     allowed = {item.lower() for item in config.get("allowed_senders", [])}
-    tag = (config.get("inbox_subject_tag") or "[codex]").lower()
+    tag = (config.get("inbox_subject_tag") or "[codex-next]").lower()
     processed = 0
 
     with imaplib.IMAP4_SSL(config.get("imap_host", "imap.gmail.com"), int(config.get("imap_port", 993))) as imap:

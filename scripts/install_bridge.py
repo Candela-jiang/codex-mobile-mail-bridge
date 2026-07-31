@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
-import tomllib
 from datetime import datetime
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -24,18 +31,57 @@ def toml_string(value: str) -> str:
     return json.dumps(str(value))
 
 
+def parse_notify_from_toml_text(text: str) -> list[str]:
+    match = re.search(r"(?ms)^notify\s*=\s*\[(.*?)^\]\s*", text)
+    if not match:
+        return []
+    values = []
+    for item in re.finditer(r'"((?:\\.|[^"\\])*)"', match.group(1)):
+        try:
+            values.append(json.loads(f'"{item.group(1)}"'))
+        except Exception:
+            values.append(item.group(1))
+    return [str(item) for item in values]
+
+
 def read_existing_notify(config_path: Path) -> list[str]:
     if not config_path.exists():
         return []
+    text = config_path.read_text(encoding="utf-8-sig")
     try:
-        with config_path.open("rb") as handle:
-            data = tomllib.load(handle)
-        notify = data.get("notify", [])
-        if isinstance(notify, list):
-            return [str(item) for item in notify]
+        if tomllib:
+            data = tomllib.loads(text)
+            notify = data.get("notify", [])
+            if isinstance(notify, list):
+                return [str(item) for item in notify]
+    except Exception:
+        pass
+    return parse_notify_from_toml_text(text)
+
+
+def read_runtime_original_notify(runtime_dir: Path) -> list[str]:
+    config_path = runtime_dir / "config.json"
+    if not config_path.exists():
+        return []
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8-sig"))
+        original = data.get("original_notify", [])
+        if isinstance(original, list):
+            return [str(item) for item in original]
     except Exception:
         return []
     return []
+
+
+def same_path(left: str, right: Path) -> bool:
+    try:
+        return os.path.normcase(os.path.abspath(left)) == os.path.normcase(os.path.abspath(str(right)))
+    except Exception:
+        return False
+
+
+def notify_points_to_bridge(notify: list[str], notify_script: Path) -> bool:
+    return any(same_path(item, notify_script) for item in notify)
 
 
 def notify_block(python_exe: str, notify_script: Path) -> str:
@@ -87,6 +133,7 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "inbox_subject_tag": args.subject_tag,
         "allowed_senders": allowed,
         "poll_seconds": args.poll_seconds,
+        "python_exe": sys.executable,
         "codex_cwd": str(Path(args.codex_cwd).expanduser()),
         "codex_exe": args.codex_exe,
         "codex_sandbox": args.codex_sandbox,
@@ -101,10 +148,10 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Install Codex Mobile Mail Bridge runtime files.")
-    default_codex_home = Path.home() / ".codex"
+    default_codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex")).expanduser()
     parser.add_argument("--sender", required=True, help="Gmail address used for SMTP and IMAP.")
     parser.add_argument("--recipient", action="append", help="Email recipient for Codex work reports. Repeatable.")
-    parser.add_argument("--allowed-sender", action="append", help="Email address allowed to send [codex] commands. Repeatable.")
+    parser.add_argument("--allowed-sender", action="append", help="Email address allowed to send [codex-next] commands. Repeatable.")
     parser.add_argument("--codex-home", default=str(default_codex_home), help="Codex home directory.")
     parser.add_argument("--runtime-dir", default="", help="Runtime directory. Defaults to <codex-home>/mobile-mail-bridge.")
     parser.add_argument("--codex-cwd", default=str(Path.cwd()), help="Working directory for email-triggered codex exec commands.")
@@ -131,13 +178,18 @@ def main() -> int:
     for filename in RUNTIME_FILES:
         shutil.copy2(SCRIPT_DIR / filename, runtime_dir / filename)
 
-    original_notify = read_existing_notify(config_path)
+    notify_script = runtime_dir / "codex_notify_email.py"
+    existing_notify = read_existing_notify(config_path)
+    if notify_points_to_bridge(existing_notify, notify_script):
+        original_notify = read_runtime_original_notify(runtime_dir)
+    else:
+        original_notify = existing_notify
     config = build_config(args, original_notify)
     (runtime_dir / "config.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
 
     backup = None
     if not args.skip_config_update:
-        backup = update_codex_config(config_path, sys.executable, runtime_dir / "codex_notify_email.py")
+        backup = update_codex_config(config_path, sys.executable, notify_script)
 
     print(f"Installed runtime: {runtime_dir}")
     print(f"Runtime config: {runtime_dir / 'config.json'}")

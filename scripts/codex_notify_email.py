@@ -1,14 +1,19 @@
+from __future__ import annotations
+
 import json
 import os
 import smtplib
 import subprocess
 import sys
-import tomllib
 import traceback
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
@@ -28,6 +33,8 @@ def load_config() -> dict:
 
 
 def load_codex_config() -> dict:
+    if not tomllib:
+        return {}
     try:
         with CODEX_CONFIG_PATH.open("rb") as handle:
             return tomllib.load(handle)

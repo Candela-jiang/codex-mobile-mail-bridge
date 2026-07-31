@@ -14,6 +14,8 @@ This is intended for local, user-owned machines. It is not an official OpenAI em
 
 ## Install
 
+Requires Python 3.8+ and PowerShell on Windows.
+
 Run from the plugin folder:
 
 ```powershell
@@ -27,10 +29,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Install-CodexMobi
 The installer writes runtime files to:
 
 ```text
-%USERPROFILE%\.codex\mobile-mail-bridge
+%CODEX_HOME%\mobile-mail-bridge
 ```
 
-It also backs up and updates `%USERPROFILE%\.codex\config.toml` so Codex calls the mail bridge through `notify`. If a previous `notify` command exists, it is stored as `original_notify` and called by the bridge first.
+If `CODEX_HOME` is not set, this is `%USERPROFILE%\.codex\mobile-mail-bridge`.
+It also backs up and updates the matching Codex `config.toml` so Codex calls the mail bridge through `notify`. If a previous `notify` command exists, it is stored as `original_notify` and called by the bridge first.
+Re-running the installer detects an existing mail-bridge `notify` entry and preserves the earlier `original_notify` instead of chaining the bridge to itself.
+
+The installer records the Python executable used during setup in runtime
+`config.json` so the background monitor can start reliably even when `python`
+is not on `PATH`.
 
 ## Gmail Setup
 
@@ -73,6 +81,7 @@ The reply email includes a work report and project evidence after the command ru
 ## Security Notes
 
 - Do not commit `config.json`, `gmail_app_password.dpapi`, logs, or PID files.
+- Prefer `CODEX_HOME` and environment-variable paths over machine-specific absolute paths when sharing setup notes across computers.
 - Keep `codex_sandbox` at `read-only` until you explicitly want email-triggered commands to edit files.
 - Only whitelist email addresses you control.
 - This bridge can send local project details over email. Use it only for projects where that is acceptable.

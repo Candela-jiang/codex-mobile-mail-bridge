@@ -17,6 +17,7 @@
     "your-address@gmail.com"
   ],
   "poll_seconds": 60,
+  "python_exe": "python",
   "codex_cwd": "C:\\path\\to\\your\\project",
   "codex_exe": "codex",
   "codex_sandbox": "read-only",

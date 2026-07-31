@@ -4,7 +4,7 @@ param(
 
   [string[]]$Recipients,
   [string[]]$AllowedSenders,
-  [string]$CodexHome = "$env:USERPROFILE\.codex",
+  [string]$CodexHome = $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE ".codex" }),
   [string]$RuntimeDir = "",
   [string]$CodexCwd = (Get-Location).Path,
   [string]$CodexExe = "codex",
@@ -16,7 +16,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $installer = Join-Path $PSScriptRoot "install_bridge.py"
-$args = @(
+$installerArgs = @(
   $installer,
   "--sender", $Sender,
   "--codex-home", $CodexHome,
@@ -27,19 +27,36 @@ $args = @(
 )
 
 if ($RuntimeDir) {
-  $args += @("--runtime-dir", $RuntimeDir)
+  $installerArgs += @("--runtime-dir", $RuntimeDir)
 }
 foreach ($recipient in ($Recipients | Where-Object { $_ })) {
-  $args += @("--recipient", $recipient)
+  $installerArgs += @("--recipient", $recipient)
 }
 foreach ($allowed in ($AllowedSenders | Where-Object { $_ })) {
-  $args += @("--allowed-sender", $allowed)
+  $installerArgs += @("--allowed-sender", $allowed)
 }
 if ($SkipConfigUpdate) {
-  $args += "--skip-config-update"
+  $installerArgs += "--skip-config-update"
 }
 
-& python @args
+$pythonCommand = @("python")
+try {
+  & python --version *> $null
+  if ($LASTEXITCODE -ne 0) { throw "python exited with $LASTEXITCODE" }
+} catch {
+  if (Get-Command py -ErrorAction SilentlyContinue) {
+    $pythonCommand = @("py", "-3")
+  } else {
+    throw "Python was not found. Install Python 3.8+ or make python/py available on PATH."
+  }
+}
+
+$pythonArgs = @()
+if ($pythonCommand.Count -gt 1) {
+  $pythonArgs = $pythonCommand[1..($pythonCommand.Count - 1)]
+}
+
+& $pythonCommand[0] @pythonArgs @installerArgs
 if ($LASTEXITCODE -ne 0) {
   throw "Installer failed with exit code $LASTEXITCODE"
 }

@@ -22,6 +22,8 @@ if (Test-Path -LiteralPath $pidPath) {
   Recipients = ($config.recipients -join ", ")
   AllowedSenders = ($config.allowed_senders -join ", ")
   SubjectTag = $config.inbox_subject_tag
+  PythonExe = $config.python_exe
+  CodexCwd = $config.codex_cwd
   Sandbox = $config.codex_sandbox
   GmailSecretSaved = (Test-Path -LiteralPath $secretPath)
 } | Format-List
