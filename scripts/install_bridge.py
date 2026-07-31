@@ -111,7 +111,7 @@ def update_codex_config(config_path: Path, python_exe: str, notify_script: Path)
     new_notify = notify_block(python_exe, notify_script)
     pattern = re.compile(r"(?ms)^notify\s*=\s*\[.*?^\]\s*")
     if pattern.search(text):
-        text = pattern.sub(new_notify, text, count=1)
+        text = pattern.sub(lambda _match: new_notify, text, count=1)
     else:
         text = new_notify + text
     config_path.write_text(text, encoding="utf-8")
