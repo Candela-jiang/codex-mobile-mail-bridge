@@ -181,7 +181,9 @@ def clean_reply_body(value: str) -> str:
     text = html.unescape(str(value or ""))
     split_markers = [
         r"(?im)^\s*---+\s*Original\s*---+\s*$",
+        r"(?im)^\s*---+\s*原始邮件\s*---+\s*$",
         r"(?im)^\s*-{2,}\s*Original Message\s*-{2,}\s*$",
+        r"(?im)^\s*-{2,}\s*原始邮件\s*-{2,}\s*$",
         r"(?im)^\s*From:\s+.+$",
         r"(?im)^\s*发件人:\s+.+$",
         r"(?im)^On .+ wrote:\s*$",
@@ -202,8 +204,20 @@ def strip_reply_prefixes(subject: str) -> str:
     value = subject.strip()
     while True:
         lowered = value.lower()
-        if lowered.startswith("re:") or lowered.startswith("fw:") or lowered.startswith("fwd:"):
-            value = value.split(":", 1)[1].strip()
+        reply_prefixes = (
+            "re:",
+            "fw:",
+            "fwd:",
+            "回复:",
+            "回复：",
+            "答复:",
+            "答复：",
+            "转发:",
+            "转发：",
+        )
+        matched_prefix = next((prefix for prefix in reply_prefixes if lowered.startswith(prefix)), "")
+        if matched_prefix:
+            value = value[len(matched_prefix) :].strip()
             continue
         return value
 
@@ -260,7 +274,31 @@ def is_bridge_generated_message(config: dict, from_addr: str, raw_body: str, mes
     if not sender or from_addr != sender:
         return False
     body_start = str(raw_body or "").lstrip()[:120]
-    return body_start.startswith("Codex 邮箱指令回执") or body_start.startswith("Codex 回执")
+    return (
+        body_start.startswith("Codex 邮箱指令回执")
+        or body_start.startswith("Codex 回执")
+        or body_start.startswith("Codex 已收到")
+    )
+
+
+def build_received_ack(config: dict, from_addr: str, subject: str, body: str, route: dict) -> str:
+    meta_notification = {
+        "cwd": route.get("cwd") or config.get("codex_cwd", ""),
+        "input-messages": [body],
+        "task-name": route.get("task_name") or strip_reply_prefixes(subject),
+    }
+    return "\n".join(
+        [
+            f"Codex 已收到  {datetime.now().strftime('%H:%M')}",
+            compact_metadata_block(meta_notification, config, subject),
+            "",
+            "状态:",
+            "开始处理。完成后会再回一封结果邮件。",
+            "",
+            "指令:",
+            body.strip() or "（邮件正文为空）",
+        ]
+    )
 
 
 def send_plain_email(config: dict, to_addr: str, subject: str, body: str, in_reply_to: str = "") -> None:
@@ -410,6 +448,12 @@ def process_once(config: dict) -> int:
                 continue
             log(f"inbox command accepted from {from_addr}: {subject}")
             delivery = command_delivery(config)
+            if config.get("send_received_ack", True):
+                try:
+                    ack_body = build_received_ack(config, from_addr, subject, body, route)
+                    send_plain_email(config, from_addr, f"Re: {subject}", ack_body, message.get("Message-ID", ""))
+                except Exception:
+                    log("received ack send failed:\n" + traceback.format_exc())
             if delivery == "app_queue":
                 try:
                     queued = queue_app_command(config, from_addr, subject, body, route, message_identity)

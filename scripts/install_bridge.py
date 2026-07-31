@@ -136,6 +136,7 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "max_subject_task_chars": 36,
         "self_report_subject_is_task_name": True,
         "inbox_enabled": False,
+        "send_received_ack": True,
         "inbox_subject_tag": args.subject_tag,
         "allowed_senders": allowed,
         "poll_seconds": args.poll_seconds,
