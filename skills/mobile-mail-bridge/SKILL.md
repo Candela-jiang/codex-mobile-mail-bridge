@@ -1,6 +1,6 @@
 ---
 name: mobile-mail-bridge
-description: Install, configure, start, stop, status-check, and troubleshoot the Codex Mobile Mail Bridge plugin. Use when Codex needs to email Chinese local computer-side work reports to a phone, poll Gmail for whitelisted [codex-next] follow-up instructions, preserve an existing notify hook, or explain the security boundary for email-triggered local Codex tasks.
+description: Local email bridge for Codex that sends phone-friendly work reports and accepts safe Gmail follow-up instructions. Use when Codex needs mobile supervision, [codex-next] inbox commands, or stable cross-machine setup and troubleshooting.
 ---
 
 # Mobile Mail Bridge

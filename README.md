@@ -1,6 +1,7 @@
 # Codex Mobile Mail Bridge
 
-Codex Mobile Mail Bridge turns a local Codex desktop or CLI workflow into a mobile supervision loop.
+A local email bridge for Codex. It turns desktop work into phone-ready reports
+and lets you send back safe follow-up instructions from Gmail.
 
 It can:
 

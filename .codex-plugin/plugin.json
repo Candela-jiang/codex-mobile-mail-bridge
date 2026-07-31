@@ -8,8 +8,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Mobile Mail Bridge",
-    "shortDescription": "Send local Codex work reports by email and accept safe mobile follow-up instructions.",
-    "longDescription": "Codex Mobile Mail Bridge installs a local email bridge that sends computer-side Codex work reports to configured recipients and polls a mailbox for whitelisted follow-up instructions tagged with [codex-next].",
+    "shortDescription": "Phone-friendly Codex reports and safe Gmail follow-ups.",
+    "longDescription": "Codex Mobile Mail Bridge turns local Codex turns into email reports, then lets Gmail messages tagged with [codex-next] feed safe follow-up instructions back into the same local workflow.",
     "developerName": "Candela-jiang",
     "category": "Productivity",
     "capabilities": [],
