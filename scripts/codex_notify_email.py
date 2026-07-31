@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 CODEX_CONFIG_PATH = Path(os.environ.get("CODEX_CONFIG_PATH", Path.home() / ".codex" / "config.toml"))
 SESSION_INDEX_PATH = Path(os.environ.get("CODEX_SESSION_INDEX_PATH", Path.home() / ".codex" / "session_index.jsonl"))
+SESSIONS_ROOT = Path(os.environ.get("CODEX_SESSIONS_ROOT", Path.home() / ".codex" / "sessions"))
 LOG_PATH = ROOT / "mail-bridge.log"
 
 
@@ -139,6 +140,8 @@ def strip_subject_noise(value: str) -> str:
 def looks_like_instruction_or_path(value: str) -> bool:
     text = str(value or "")
     lowered = text.lower()
+    if re.fullmatch(r"\$[\w-]+", text.strip()):
+        return True
     return any(
         marker in lowered
         for marker in (
@@ -152,26 +155,114 @@ def looks_like_instruction_or_path(value: str) -> bool:
     ) or len(text) > 80
 
 
-def session_index_title(thread_id: str = "") -> str:
+def iter_session_index() -> list[dict]:
     if not SESSION_INDEX_PATH.exists():
-        return ""
-    latest = ""
+        return []
+    items = []
     try:
         for line in SESSION_INDEX_PATH.read_text(encoding="utf-8-sig", errors="replace").splitlines():
             try:
                 item = json.loads(line)
             except Exception:
                 continue
-            title = clean_subject(str(item.get("thread_name") or ""))
-            if not title:
-                continue
-            if thread_id and str(item.get("id") or "") == thread_id:
-                latest = title
-            elif not thread_id:
-                latest = title
+            if isinstance(item, dict):
+                items.append(item)
     except Exception:
-        return ""
+        return []
+    return items
+
+
+def session_index_title(thread_id: str = "") -> str:
+    latest = ""
+    for item in iter_session_index():
+        title = clean_subject(str(item.get("thread_name") or ""))
+        if not title:
+            continue
+        if thread_id and str(item.get("id") or "") == thread_id:
+            latest = title
+        elif not thread_id:
+            latest = title
     return latest
+
+
+def session_index_id_for_title(title: str) -> str:
+    target = clean_subject(title).casefold()
+    if not target:
+        return ""
+    found = ""
+    for item in iter_session_index():
+        item_title = clean_subject(str(item.get("thread_name") or "")).casefold()
+        if item_title == target:
+            found = str(item.get("id") or "")
+    return found
+
+
+def notification_thread_id(notification: dict, task_name: str = "") -> str:
+    for key in ("thread-id", "thread_id", "session-id", "session_id", "id"):
+        if notification.get(key):
+            return str(notification[key])
+    return session_index_id_for_title(task_name)
+
+
+def session_file_for_thread(thread_id: str):
+    if not thread_id or not SESSIONS_ROOT.exists():
+        return None
+    try:
+        matches = list(SESSIONS_ROOT.rglob(f"*{thread_id}*.jsonl"))
+    except Exception:
+        return None
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item.stat().st_mtime)
+
+
+def text_from_message_content(content) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") in ("input_text", "output_text", "text"):
+            parts.append(str(item.get("text") or ""))
+    return "\n".join(part for part in parts if part.strip())
+
+
+def session_last_user_and_assistant(thread_id: str):
+    path = session_file_for_thread(thread_id)
+    if not path:
+        return "", ""
+    last_user = ""
+    last_assistant = ""
+    last_final = ""
+    try:
+        for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+            if item.get("type") != "response_item":
+                continue
+            payload = item.get("payload") or {}
+            if payload.get("type") != "message":
+                continue
+            role = payload.get("role")
+            text = text_from_message_content(payload.get("content")).strip()
+            if not text:
+                continue
+            if role == "user":
+                cleaned = sanitize_user_instruction(text)
+                if cleaned and not looks_like_instruction_or_path(cleaned):
+                    last_user = cleaned
+            elif role == "assistant":
+                last_assistant = text
+                if payload.get("phase") == "final_answer":
+                    last_final = text
+    except Exception:
+        return "", ""
+    return last_user, last_final or last_assistant
 
 
 def compact_subject_task(value: str, limit: int) -> str:
@@ -259,7 +350,7 @@ def metadata_lines(notification: dict, config: dict, task_name: str = "") -> lis
     return [
         f"模型: {resolve_model_label(notification, codex_config)}",
         f"项目: {short_project_label(resolve_project_label(cwd, codex_config))}",
-        f"任务: {task_name or resolve_task_name(notification)}",
+        f"任务: {task_name or resolve_task_name(notification, config)}",
     ]
 
 
@@ -283,6 +374,16 @@ def compact_text(value: str, limit: int = 600) -> str:
     return truncate_text("\n".join(lines), limit)
 
 
+def sanitize_user_instruction(value: str, limit: int = 600) -> str:
+    text = str(value or "")
+    text = re.sub(r"(?is)<image\b.*?</image>", "", text)
+    text = re.sub(r"(?is)<image\b[^>]*>", "", text)
+    text = re.sub(r"(?ms)^# Files mentioned by the user:.*?(?=^## My request for Codex:|\Z)", "", text)
+    text = text.replace("## My request for Codex:", "")
+    text = re.sub(r"(?m)^.*\\.(png|jpg|jpeg|gif|webp):\s+.*$", "", text, flags=re.IGNORECASE)
+    return compact_text(text, limit)
+
+
 def short_project_label(project_label: str) -> str:
     label = str(project_label or "").strip()
     if not label:
@@ -302,13 +403,38 @@ def user_instruction_summary(messages: list, limit: int = 600) -> str:
         "get an understanding of the user's intent",
     )
     for message in messages:
-        text = compact_text(str(message), limit)
+        text = sanitize_user_instruction(str(message), limit)
         if not text:
             continue
         if any(text.lower().startswith(prefix) for prefix in internal_prefixes):
             continue
+        if looks_like_instruction_or_path(text):
+            continue
         return text
     return "（空）"
+
+
+def resolve_user_instruction(notification: dict, config: dict, task_name: str) -> str:
+    user_messages = notification.get("input-messages") or []
+    summary = user_instruction_summary(user_messages, 600)
+    if summary != "（空）":
+        return summary
+
+    thread_id = notification_thread_id(notification, task_name)
+    last_user, _last_assistant = session_last_user_and_assistant(thread_id)
+    if last_user:
+        return truncate_text(last_user, 600)
+    return "（空）"
+
+
+def resolve_assistant_result(notification: dict, config: dict, task_name: str) -> str:
+    assistant_message = str(notification.get("last-assistant-message") or "").strip()
+    if assistant_message:
+        return assistant_message
+
+    thread_id = notification_thread_id(notification, task_name)
+    _last_user, last_assistant = session_last_user_and_assistant(thread_id)
+    return last_assistant.strip()
 
 
 def safe_existing_cwd(cwd: str, config: dict) -> str:
@@ -392,9 +518,9 @@ def mobile_reply_hint(config: dict) -> str:
 
 
 def build_body(notification: dict, config: dict) -> str:
-    user_messages = notification.get("input-messages") or []
-    assistant_message = notification.get("last-assistant-message") or ""
     task_name = resolve_task_name(notification, config)
+    user_instruction = resolve_user_instruction(notification, config, task_name)
+    assistant_message = resolve_assistant_result(notification, config, task_name)
     cwd = notification.get("cwd", "")
     evidence = git_status_report(cwd, config)
     body_parts = [
@@ -404,7 +530,7 @@ def build_body(notification: dict, config: dict) -> str:
         metadata_block(notification, config, task_name),
         "",
         "指令:",
-        user_instruction_summary(user_messages, 600),
+        user_instruction,
     ]
     if evidence:
         body_parts.extend(["", "电脑端:", evidence])

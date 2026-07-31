@@ -113,6 +113,10 @@ project, task, and Git details remain in the email body. Adjust
 `max_subject_task_chars` in runtime `config.json` (default 36) if you want a longer or
 shorter task label.
 
+The report body keeps `指令` short by showing the user's latest actual command.
+It filters internal skill links, image tags, and local file paths. `结果` uses
+the final Codex output for that turn.
+
 ## Security Notes
 
 - Do not commit `config.json`, `gmail_app_password.dpapi`, logs, or PID files.
