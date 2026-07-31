@@ -173,14 +173,58 @@ def metadata_lines(notification: dict, config: dict, task_name: str = "") -> lis
     codex_config = load_codex_config()
     cwd = notification.get("cwd") or config.get("codex_cwd") or ""
     return [
-        f"AI 模型: {resolve_model_label(notification, codex_config)}",
-        f"项目: {resolve_project_label(cwd, codex_config)}",
+        f"模型: {resolve_model_label(notification, codex_config)}",
+        f"项目: {short_project_label(resolve_project_label(cwd, codex_config))}",
         f"任务: {task_name or resolve_task_name(notification)}",
     ]
 
 
 def metadata_block(notification: dict, config: dict, task_name: str = "") -> str:
     return "\n".join(metadata_lines(notification, config, task_name))
+
+
+def truncate_text(value: str, limit: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n...（已截断）"
+
+
+def compact_text(value: str, limit: int = 600) -> str:
+    lines = []
+    for line in str(value or "").splitlines():
+        stripped = " ".join(line.split())
+        if stripped:
+            lines.append(stripped)
+    return truncate_text("\n".join(lines), limit)
+
+
+def short_project_label(project_label: str) -> str:
+    label = str(project_label or "").strip()
+    if not label:
+        return "未知"
+    trust = ""
+    if label.endswith(")") and " (" in label:
+        label, trust = label.rsplit(" (", 1)
+        trust = f" ({trust}"
+    path = Path(label)
+    name = path.name or label
+    return f"{name}{trust}" if name else label
+
+
+def user_instruction_summary(messages: list, limit: int = 600) -> str:
+    internal_prefixes = (
+        "generate 0 to 3 hyperpersonalized suggestions",
+        "get an understanding of the user's intent",
+    )
+    for message in messages:
+        text = compact_text(str(message), limit)
+        if not text:
+            continue
+        if any(text.lower().startswith(prefix) for prefix in internal_prefixes):
+            continue
+        return text
+    return "（空）"
 
 
 def safe_existing_cwd(cwd: str, config: dict) -> str:
@@ -222,39 +266,37 @@ def find_git_root(cwd: str) -> str:
 
 def git_status_report(cwd: str, config: dict) -> str:
     if not config.get("include_git_summary", True):
-        return "Git 摘要已关闭。"
+        return ""
 
     cwd = safe_existing_cwd(cwd, config)
     git_root = find_git_root(cwd)
     if not git_root:
-        return "\n".join(
-            [
-                "Git: 当前项目目录未检测到 Git 仓库。",
-                "变更文件: 没有 Git 仓库，无法统计。",
-            ]
-        )
+        return ""
 
     status_code, status_text = run_text_command(["git", "status", "--short"], git_root)
     branch_code, branch_text = run_text_command(["git", "branch", "--show-current"], git_root)
     stat_code, stat_text = run_text_command(["git", "diff", "--stat"], git_root)
 
     branch = branch_text if branch_code == 0 and branch_text else "（分离 HEAD 或未知）"
-    lines = [f"Git 根目录: {git_root}", f"Git 分支: {branch}"]
+    lines = [f"分支: {branch}"]
 
     if status_code == 0 and status_text:
         status_lines = status_text.splitlines()
-        max_files = int(config.get("max_git_files") or 30)
-        lines.append(f"变更文件（{len(status_lines)} 个）:")
+        max_files = min(int(config.get("max_git_files") or 30), 12)
+        lines.append(f"变更: {len(status_lines)} 个文件")
         lines.extend(status_lines[:max_files])
         if len(status_lines) > max_files:
             lines.append(f"... 还有 {len(status_lines) - max_files} 个文件未列出")
     elif status_code == 0:
-        lines.append("变更文件: 无")
+        lines.append("变更: 无")
     else:
-        lines.append(f"变更文件: git status 执行失败: {status_text}")
+        lines.append(f"变更: git status 执行失败: {status_text}")
 
     if stat_code == 0 and stat_text:
-        lines.extend(["", "Diff 统计:", stat_text])
+        stat_lines = stat_text.splitlines()
+        lines.extend(["", "统计:", *stat_lines[:8]])
+        if len(stat_lines) > 8:
+            lines.append("...（统计已截断）")
     return "\n".join(lines)
 
 
@@ -270,29 +312,29 @@ def build_body(notification: dict, config: dict) -> str:
     assistant_message = notification.get("last-assistant-message") or ""
     task_name = resolve_task_name(notification)
     cwd = notification.get("cwd", "")
-    body = "\n".join(
+    evidence = git_status_report(cwd, config)
+    body_parts = [
+        "Codex 工作报告",
+        "",
+        f"时间: {datetime.now().strftime('%m-%d %H:%M')}",
+        metadata_block(notification, config, task_name),
+        "",
+        "指令:",
+        user_instruction_summary(user_messages, 600),
+    ]
+    if evidence:
+        body_parts.extend(["", "电脑端:", evidence])
+    body_parts.extend(
         [
-            "Codex 电脑端工作报告",
             "",
-            f"时间: {datetime.now().isoformat(timespec='seconds')}",
-            metadata_block(notification, config, task_name),
-            f"线程: {notification.get('thread-id', '')}",
-            f"轮次: {notification.get('turn-id', '')}",
-            f"工作目录: {cwd}",
+            "结果:",
+            truncate_text(assistant_message.strip() or "（空）", 5000),
             "",
-            "电脑端证据:",
-            git_status_report(cwd, config),
-            "",
-            "用户输入:",
-            "\n".join(str(item) for item in user_messages).strip() or "（空）",
-            "",
-            "Codex 回复:",
-            assistant_message.strip() or "（空）",
-            "",
-            "手机下一步指令:",
+            "下一步:",
             mobile_reply_hint(config),
         ]
     )
+    body = "\n".join(body_parts)
     limit = int(config.get("max_body_chars") or 15000)
     if len(body) > limit:
         body = body[:limit] + "\n\n[Truncated by Codex mail bridge]"
