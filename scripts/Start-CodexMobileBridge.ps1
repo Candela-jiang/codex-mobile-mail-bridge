@@ -1,8 +1,10 @@
 $ErrorActionPreference = "Stop"
 $configPath = Join-Path $PSScriptRoot "config.json"
 $pidPath = Join-Path $PSScriptRoot "inbox-monitor.pid"
+$watchdogPidPath = Join-Path $PSScriptRoot "watchdog.pid"
 $logPath = Join-Path $PSScriptRoot "mail-bridge.log"
 $monitorPath = Join-Path $PSScriptRoot "codex_inbox_monitor.py"
+$watchdogPath = Join-Path $PSScriptRoot "Watch-CodexMobileBridge.ps1"
 
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
 
@@ -14,6 +16,30 @@ function Resolve-PythonCommand {
   }
   if (Get-Command py -ErrorAction SilentlyContinue) { return @("py", "-3") }
   return @("python")
+}
+
+function Start-WatchdogIfNeeded {
+  if (Test-Path -LiteralPath $watchdogPidPath) {
+    $oldPid = Get-Content -Raw -LiteralPath $watchdogPidPath
+    if ($oldPid -match '^\d+$') {
+      $existingWatchdog = Get-Process -Id ([int]$oldPid) -ErrorAction SilentlyContinue
+      if ($existingWatchdog) { return }
+    }
+  }
+
+  if (-not (Test-Path -LiteralPath $watchdogPath)) { return }
+
+  $process = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-WindowStyle",
+    "Hidden",
+    "-File",
+    $watchdogPath
+  ) -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru
+  $process.Id | Set-Content -LiteralPath $watchdogPidPath -Encoding ASCII
+  Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] watchdog started: pid=$($process.Id)"
 }
 $existing = $null
 if (Test-Path -LiteralPath $pidPath) {
@@ -44,6 +70,8 @@ if (-not $existing) {
   Write-Host "Codex mobile bridge: ON"
   Write-Host "Inbox monitor already running: pid=$($existing.Id)"
 }
+
+Start-WatchdogIfNeeded
 
 Write-Host "Phone workflow:"
 Write-Host "1. Codex turn reports will be emailed to the configured recipients."

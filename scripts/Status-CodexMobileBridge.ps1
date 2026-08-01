@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 $configPath = Join-Path $PSScriptRoot "config.json"
 $pidPath = Join-Path $PSScriptRoot "inbox-monitor.pid"
 $secretPath = Join-Path $PSScriptRoot "gmail_app_password.dpapi"
+$watchdogPidPath = Join-Path $PSScriptRoot "watchdog.pid"
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom-Json
 
 $monitorPid = ""
@@ -13,11 +14,22 @@ if (Test-Path -LiteralPath $pidPath) {
   }
 }
 
+$watchdogPid = ""
+$watchdogRunning = $false
+if (Test-Path -LiteralPath $watchdogPidPath) {
+  $watchdogPid = (Get-Content -Raw -LiteralPath $watchdogPidPath).Trim()
+  if ($watchdogPid -match '^\d+$') {
+    $watchdogRunning = [bool](Get-Process -Id ([int]$watchdogPid) -ErrorAction SilentlyContinue)
+  }
+}
+
 [pscustomobject]@{
   OutboundReports = $config.enabled
   InboxCommands = $config.inbox_enabled
   MonitorRunning = $running
   MonitorPid = $monitorPid
+  WatchdogRunning = $watchdogRunning
+  WatchdogPid = $watchdogPid
   Sender = $config.sender
   Recipients = ($config.recipients -join ", ")
   AllowedSenders = ($config.allowed_senders -join ", ")

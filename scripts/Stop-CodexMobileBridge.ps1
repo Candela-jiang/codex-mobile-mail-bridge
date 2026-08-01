@@ -7,6 +7,7 @@ $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $configPath | ConvertFrom
 $config.enabled = $false
 $config.inbox_enabled = $false
 $config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $configPath -Encoding UTF8
+$watchdogPidPath = Join-Path $PSScriptRoot "watchdog.pid"
 
 if (Test-Path -LiteralPath $pidPath) {
   $oldPid = Get-Content -Raw -LiteralPath $pidPath
@@ -17,7 +18,19 @@ if (Test-Path -LiteralPath $pidPath) {
       Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] mobile bridge monitor stopped: pid=$($process.Id)"
     }
   }
-  Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+}
+
+if (Test-Path -LiteralPath $watchdogPidPath) {
+  $watchdogPid = Get-Content -Raw -LiteralPath $watchdogPidPath
+  if ($watchdogPid -match '^\d+$') {
+    $watchdogProcess = Get-Process -Id ([int]$watchdogPid) -ErrorAction SilentlyContinue
+    if ($watchdogProcess) {
+      Stop-Process -Id $watchdogProcess.Id -Force -ErrorAction SilentlyContinue
+      Add-Content -LiteralPath $logPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] watchdog stopped: pid=$($watchdogProcess.Id)"
+    }
+  }
+  Remove-Item -LiteralPath $watchdogPidPath -Force -ErrorAction SilentlyContinue
 }
 
 $escapedRoot = [regex]::Escape($PSScriptRoot)

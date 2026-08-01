@@ -51,8 +51,40 @@ def load_codex_config() -> dict:
         return {}
 
 
+def save_config(config: dict) -> None:
+    CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=4), encoding="utf-8")
+
+
+def resolve_original_notify_command(config: dict) -> list[str]:
+    original = list(config.get("original_notify") or [])
+    if original and Path(str(original[0])).exists():
+        return original
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        runtimes_root = Path(local_app_data) / "OpenAI" / "Codex" / "runtimes"
+        try:
+            candidates = sorted(
+                runtimes_root.rglob("codex-computer-use.exe"),
+                key=lambda item: item.stat().st_mtime,
+                reverse=True,
+            )
+        except Exception:
+            candidates = []
+        if candidates:
+            resolved = [str(candidates[0]), *(original[1:] if len(original) > 1 else ["turn-ended"])]
+            if resolved != original:
+                config["original_notify"] = resolved
+                try:
+                    save_config(config)
+                except Exception:
+                    pass
+            return resolved
+    return original
+
+
 def forward_original_notify(config: dict, raw_notification: str) -> None:
-    original = config.get("original_notify") or []
+    original = resolve_original_notify_command(config)
     if not original:
         return
     try:
