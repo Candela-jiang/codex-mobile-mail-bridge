@@ -47,6 +47,10 @@ The installer records the Python executable used during setup in runtime
 `config.json` so the background monitor can start reliably even when `python`
 is not on `PATH`.
 
+For faster phone replies, set `email_command_model` in runtime `config.json`.
+This only affects commands that arrive by email; normal Codex App tasks keep
+their own model settings.
+
 ## Gmail Setup
 
 Create a Gmail App Password, then run:
@@ -74,6 +78,19 @@ Stop:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\mobile-mail-bridge\Stop-CodexMobileBridge.ps1"
 ```
+
+## Test
+
+Run the local checks before packaging or reinstalling:
+
+```powershell
+python -m py_compile .\scripts\codex_notify_email.py .\scripts\codex_inbox_monitor.py .\scripts\install_bridge.py
+python -m unittest discover -s .\tests
+```
+
+The tests do not connect to Gmail or launch Codex. They cover plugin metadata,
+safe example defaults, reply-subject routing, command-subject parsing, and
+reply-body cleanup.
 
 ## Mobile Commands
 

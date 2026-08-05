@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Codex Mobile Mail Bridge</title>
+  <desc id="desc">A phone, envelope, and bridge line for mobile email control of Codex.</desc>
+  <rect width="128" height="128" rx="28" fill="#0f172a"/>
+  <path d="M24 82c9-14 21-21 36-21h8c15 0 27 7 36 21" fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M31 82h66" stroke="#f8fafc" stroke-width="6" stroke-linecap="round"/>
+  <rect x="31" y="24" width="36" height="60" rx="8" fill="#f8fafc"/>
+  <rect x="36" y="33" width="26" height="39" rx="3" fill="#0f172a"/>
+  <circle cx="49" cy="78" r="2.5" fill="#0f172a"/>
+  <rect x="61" y="39" width="39" height="28" rx="5" fill="#22c55e"/>
+  <path d="M66 45l14.5 10L95 45" fill="none" stroke="#052e16" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

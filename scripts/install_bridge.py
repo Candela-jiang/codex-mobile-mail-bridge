@@ -102,7 +102,10 @@ def notify_block(python_exe: str, notify_script: Path) -> str:
 
 def update_codex_config(config_path: Path, python_exe: str, notify_script: Path) -> Path:
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    backup = config_path.with_suffix(config_path.suffix + f".bak-mobile-mail-bridge-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+    backup = config_path.with_suffix(
+        config_path.suffix
+        + f".bak-mobile-mail-bridge-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    )
     text = config_path.read_text(encoding="utf-8-sig") if config_path.exists() else ""
     if config_path.exists():
         shutil.copy2(config_path, backup)
@@ -139,12 +142,15 @@ def build_config(args: argparse.Namespace, original_notify: list[str]) -> dict:
         "send_received_ack": False,
         "inbox_subject_tag": args.subject_tag,
         "allowed_senders": allowed,
+        "ignore_unseen_before_start": True,
+        "startup_unseen_grace_seconds": 120,
         "poll_seconds": args.poll_seconds,
         "imap_idle_enabled": True,
         "idle_wait_seconds": 300,
         "python_exe": sys.executable,
         "codex_cwd": str(Path(args.codex_cwd).expanduser()),
         "codex_exe": args.codex_exe,
+        "email_command_model": args.email_command_model,
         "codex_sandbox": args.codex_sandbox,
         "codex_timeout_seconds": args.codex_timeout_seconds,
         "command_delivery": args.command_delivery,
@@ -164,23 +170,62 @@ def parse_args() -> argparse.Namespace:
     default_codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex")).expanduser()
     parser.add_argument("--sender", default=DEFAULT_SENDER, help="Gmail address used for SMTP and IMAP.")
     parser.add_argument("--recipient", action="append", help="Email recipient for Codex work reports. Repeatable.")
-    parser.add_argument("--allowed-sender", action="append", help="Email address allowed to send [codex-next] commands. Repeatable.")
+    parser.add_argument(
+        "--allowed-sender",
+        action="append",
+        help="Email address allowed to send [codex-next] commands. Repeatable.",
+    )
     parser.add_argument("--codex-home", default=str(default_codex_home), help="Codex home directory.")
-    parser.add_argument("--runtime-dir", default="", help="Runtime directory. Defaults to <codex-home>/mobile-mail-bridge.")
-    parser.add_argument("--codex-cwd", default=str(Path.cwd()), help="Working directory for email-triggered codex exec commands.")
+    parser.add_argument(
+        "--runtime-dir",
+        default="",
+        help="Runtime directory. Defaults to <codex-home>/mobile-mail-bridge.",
+    )
+    parser.add_argument(
+        "--codex-cwd",
+        default=str(Path.cwd()),
+        help="Working directory for email-triggered codex exec commands.",
+    )
     parser.add_argument("--codex-exe", default=shutil.which("codex") or "codex", help="Path to codex executable.")
-    parser.add_argument("--codex-sandbox", default="read-only", choices=["read-only", "workspace-write", "danger-full-access"])
+    parser.add_argument(
+        "--email-command-model",
+        default="",
+        help="Optional model override used only for email-triggered Codex commands.",
+    )
+    parser.add_argument(
+        "--codex-sandbox",
+        default="read-only",
+        choices=["read-only", "workspace-write", "danger-full-access"],
+    )
     parser.add_argument("--codex-timeout-seconds", type=int, default=1800)
-    parser.add_argument("--command-delivery", default="exec", choices=["exec", "app_queue"], help="Use exec for background CLI commands or app_queue for visible Codex App delivery.")
-    parser.add_argument("--command-mode", default="exec", choices=["exec", "resume"], help="Default inbox route when the subject has no explicit target.")
-    parser.add_argument("--default-target-session", default="", help="Session id or thread name used when --command-mode resume is selected.")
+    parser.add_argument(
+        "--command-delivery",
+        default="exec",
+        choices=["exec", "app_queue"],
+        help="Use exec for background CLI commands or app_queue for visible Codex App delivery.",
+    )
+    parser.add_argument(
+        "--command-mode",
+        default="exec",
+        choices=["exec", "resume"],
+        help="Default inbox route when the subject has no explicit target.",
+    )
+    parser.add_argument(
+        "--default-target-session",
+        default="",
+        help="Session id or thread name used when --command-mode resume is selected.",
+    )
     parser.add_argument("--poll-seconds", type=int, default=60)
     parser.add_argument("--subject-tag", default="[codex-next]")
     parser.add_argument("--smtp-host", default="smtp.gmail.com")
     parser.add_argument("--smtp-port", type=int, default=587)
     parser.add_argument("--imap-host", default="imap.gmail.com")
     parser.add_argument("--imap-port", type=int, default=993)
-    parser.add_argument("--skip-config-update", action="store_true", help="Copy files and config without changing Codex config.toml notify.")
+    parser.add_argument(
+        "--skip-config-update",
+        action="store_true",
+        help="Copy files and config without changing Codex config.toml notify.",
+    )
     return parser.parse_args()
 
 

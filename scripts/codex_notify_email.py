@@ -470,7 +470,9 @@ def resolve_project_label(cwd: str, codex_config: dict) -> str:
     best_info = {}
     for project_path, project_info in projects.items():
         project_norm = str(project_path).casefold().rstrip("\\/")
-        if cwd_norm == project_norm or cwd_norm.startswith(project_norm + "\\") or cwd_norm.startswith(project_norm + "/"):
+        if cwd_norm == project_norm or cwd_norm.startswith(project_norm + "\\") or cwd_norm.startswith(
+            project_norm + "/"
+        ):
             if len(project_norm) > len(best_path.casefold()):
                 best_path = str(project_path)
                 best_info = project_info if isinstance(project_info, dict) else {}

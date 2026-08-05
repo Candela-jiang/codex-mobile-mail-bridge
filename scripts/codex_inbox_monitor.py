@@ -15,15 +15,16 @@ import tempfile
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from email.header import decode_header
 from email.message import EmailMessage
 from email.message import Message
-from email.utils import parseaddr
+from email.utils import parseaddr, parsedate_to_datetime
 from pathlib import Path
 
 from codex_notify_email import (
     ROOT,
+    clean_subject,
     get_password,
     git_status_report,
     compact_metadata_block,
@@ -40,6 +41,7 @@ from codex_notify_email import (
 PROCESSED_IDS_PATH = ROOT / "processed_message_ids.json"
 MAX_PROCESSED_IDS = 500
 DEFAULT_APP_QUEUE_PATH = ROOT / "pending_app_commands.jsonl"
+MONITOR_STARTED_AT = datetime.now(timezone.utc)
 
 
 def inbox_tag_name(config: dict) -> str:
@@ -98,6 +100,13 @@ def route_label(route: dict) -> str:
     return "新后台任务"
 
 
+def reply_subject_for_route(route: dict, subject: str) -> str:
+    title = str(route.get("task_name") or "").strip()
+    if not title:
+        title = strip_reply_prefixes(subject)
+    return clean_subject(title or "Codex task")
+
+
 def command_delivery(config: dict) -> str:
     value = str(config.get("command_delivery") or "exec").strip().lower()
     if value in {"app", "app_queue", "queue"}:
@@ -129,7 +138,14 @@ def build_app_prompt(from_addr: str, subject: str, body: str, route: dict) -> st
     )
 
 
-def queue_app_command(config: dict, from_addr: str, subject: str, body: str, route: dict, message_identity: str) -> dict:
+def queue_app_command(
+    config: dict,
+    from_addr: str,
+    subject: str,
+    body: str,
+    route: dict,
+    message_identity: str,
+) -> dict:
     target = str(route.get("target") or "").strip()
     if not target:
         target = str(config.get("default_target_session") or "").strip()
@@ -257,6 +273,32 @@ def build_message_identity(from_addr: str, subject: str, body: str, message_id: 
     return f"sha256:{digest}"
 
 
+def message_date_utc(message: Message) -> datetime | None:
+    raw_date = message.get("Date", "")
+    if not raw_date:
+        return None
+    try:
+        parsed = parsedate_to_datetime(raw_date)
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def is_stale_unseen_message(config: dict, message: Message) -> bool:
+    if not bool(config.get("ignore_unseen_before_start", True)):
+        return False
+    try:
+        grace_seconds = max(0, int(config.get("startup_unseen_grace_seconds", 120)))
+    except (TypeError, ValueError):
+        grace_seconds = 120
+    received_at = message_date_utc(message)
+    if received_at is None:
+        return False
+    return received_at < MONITOR_STARTED_AT - timedelta(seconds=grace_seconds)
+
+
 def is_self_report(config: dict, from_addr: str, subject: str) -> bool:
     sender = str(config.get("sender", "")).lower()
     prefix = str(config.get("subject_prefix", "[Codex]")).lower()
@@ -265,7 +307,9 @@ def is_self_report(config: dict, from_addr: str, subject: str) -> bool:
         return False
     if resolve_command_route(config, core_subject):
         return False
-    return bool(prefix and core_subject.startswith(prefix)) or bool(config.get("self_report_subject_is_task_name", True))
+    return bool(prefix and core_subject.startswith(prefix)) or bool(
+        config.get("self_report_subject_is_task_name", True)
+    )
 
 
 def is_bridge_generated_message(config: dict, from_addr: str, raw_body: str, message: Message) -> bool:
@@ -286,12 +330,12 @@ def build_received_ack(config: dict, from_addr: str, subject: str, body: str, ro
     meta_notification = {
         "cwd": route.get("cwd") or config.get("codex_cwd", ""),
         "input-messages": [body],
-        "task-name": route.get("task_name") or strip_reply_prefixes(subject),
+        "task-name": reply_subject_for_route(route, subject),
     }
     return "\n".join(
         [
             f"Codex 已收到  {datetime.now().strftime('%H:%M')}",
-            compact_metadata_block(meta_notification, config, subject),
+            compact_metadata_block(meta_notification, config, route.get("task_name") or ""),
             "",
             "状态:",
             "开始处理。完成后会再回一封结果邮件。",
@@ -366,6 +410,10 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
     codex_exe = resolve_codex_exe(config)
     if not codex_exe:
         return "Codex 启动失败：没有找到可用的 codex.exe。请在电脑端更新邮件桥的 codex_exe 配置。"
+    model_args = []
+    email_command_model = str(config.get("email_command_model") or "").strip()
+    if email_command_model:
+        model_args = ["--model", email_command_model]
     prompt = "\n".join(
         [
             "You are Codex running from a Gmail command bridge.",
@@ -386,6 +434,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
         cmd = [
             codex_exe,
             "exec",
+            *model_args,
             "resume",
             "--all",
             "--skip-git-repo-check",
@@ -398,6 +447,7 @@ def run_codex_from_email(config: dict, from_addr: str, subject: str, body: str, 
         cmd = [
             codex_exe,
             "exec",
+            *model_args,
             "--cd",
             safe_cwd,
             "--sandbox",
@@ -457,6 +507,10 @@ def process_once(config: dict) -> int:
             message = email.message_from_bytes(raw)
             from_addr = parseaddr(decode_value(message.get("From", "")))[1].lower()
             subject = decode_value(message.get("Subject", ""))
+            if is_stale_unseen_message(config, message):
+                log(f"inbox skipped stale unseen message: {subject}")
+                imap.store(msg_id, "+FLAGS", "\\Seen")
+                continue
             raw_body = get_text_body(message)
             if is_bridge_generated_message(config, from_addr, raw_body, message):
                 log(f"inbox skipped bridge-generated message: {subject}")
@@ -484,7 +538,13 @@ def process_once(config: dict) -> int:
             if config.get("send_received_ack", True):
                 try:
                     ack_body = build_received_ack(config, from_addr, subject, body, route)
-                    send_plain_email(config, from_addr, f"Re: {subject}", ack_body, message.get("Message-ID", ""))
+                    send_plain_email(
+                        config,
+                        from_addr,
+                        reply_subject_for_route(route, subject),
+                        ack_body,
+                        message.get("Message-ID", ""),
+                    )
                 except Exception:
                     log("received ack send failed:\n" + traceback.format_exc())
             if delivery == "app_queue":
@@ -515,12 +575,12 @@ def process_once(config: dict) -> int:
             meta_notification = {
                 "cwd": route.get("cwd") or config.get("codex_cwd", ""),
                 "input-messages": [body],
-                "task-name": route.get("task_name") or subject,
+                "task-name": reply_subject_for_route(route, subject),
             }
             evidence = git_status_report(route.get("cwd") or config.get("codex_cwd", ""), config)
             reply_parts = [
                 f"Codex 回执  {datetime.now().strftime('%m-%d %H:%M')}",
-                compact_metadata_block(meta_notification, config, subject),
+                compact_metadata_block(meta_notification, config, route.get("task_name") or ""),
             ]
             if evidence:
                 reply_parts.extend(["", "电脑端:", evidence])
@@ -535,7 +595,13 @@ def process_once(config: dict) -> int:
                 ]
             )
             reply_body = "\n".join(reply_parts)
-            send_plain_email(config, from_addr, f"Re: {subject}", reply_body, message.get("Message-ID", ""))
+            send_plain_email(
+                config,
+                from_addr,
+                reply_subject_for_route(route, subject),
+                reply_body,
+                message.get("Message-ID", ""),
+            )
             processed_set.add(message_identity)
             processed_ids.append(message_identity)
             save_processed_message_ids(processed_ids)

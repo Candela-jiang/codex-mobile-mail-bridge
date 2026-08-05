@@ -1,7 +1,15 @@
 {
   "name": "codex-mobile-mail-bridge",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Email-based mobile supervision and follow-up command loop for local Codex work.",
+  "keywords": [
+    "codex",
+    "email",
+    "gmail",
+    "mobile",
+    "remote-control",
+    "workflow"
+  ],
   "author": {
     "name": "Candela-jiang"
   },
@@ -12,7 +20,22 @@
     "longDescription": "Codex Mobile Mail Bridge turns local Codex turns into email reports, then lets phone replies route back to the original local Codex task and email the final result after execution.",
     "developerName": "Candela-jiang",
     "category": "Productivity",
-    "capabilities": [],
-    "defaultPrompt": "Help me configure and run the Codex Mobile Mail Bridge."
+    "capabilities": [
+      "Gmail SMTP reports",
+      "Gmail IMAP command intake",
+      "Codex exec follow-ups",
+      "Windows DPAPI secret storage",
+      "Phone-friendly work summaries"
+    ],
+    "logo": "./assets/mobile-mail-bridge.svg",
+    "composerIcon": "./assets/mobile-mail-bridge.svg",
+    "websiteURL": "https://github.com/Candela-jiang/codex-mobile-mail-bridge",
+    "privacyPolicyURL": "https://github.com/Candela-jiang/codex-mobile-mail-bridge/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/Candela-jiang/codex-mobile-mail-bridge/blob/main/TERMS.md",
+    "defaultPrompt": [
+      "Help me configure and run the Codex Mobile Mail Bridge.",
+      "Check the Codex Mobile Mail Bridge status.",
+      "Troubleshoot why a mobile email command did not reply."
+    ]
   }
 }

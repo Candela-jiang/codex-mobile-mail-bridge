@@ -2,7 +2,11 @@ config.json
 gmail_app_password.dpapi
 mail-bridge.log
 inbox-monitor.pid
+watchdog.pid
 processed_message_ids.json
+mail_thread_routes.json
+pending_app_commands.jsonl
+dispatched_app_commands.jsonl
 __pycache__/
 *.pyc
 .env
